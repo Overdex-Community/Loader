@@ -12,7 +12,7 @@ Docs liên quan:
 ]]
 
 -- (Nếu bạn đang trong môi trường có Starlight):
-getgenv().InterfaceName = function() return "Shouko Test Lib" end -- optional theo docs
+-- getgenv().InterfaceName = function() return "Shouko Test Lib" end -- optional theo docs
 local Starlight   = loadstring(game:HttpGet("https://raw.nebulasoftworks.xyz/starlight"))()
 local NebulaIcons = loadstring(game:HttpGet("https://raw.nebulasoftworks.xyz/nebula-icon-library-loader"))()
 
