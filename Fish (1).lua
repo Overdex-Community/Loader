@@ -120,7 +120,7 @@ local allowedRod = {
     ["Ghostfinn Rod"] = true,
     ["Ares Rod"] = true,
     ["Astral Rod"] = true,
-	["Lucky Rod"] = true,
+	["Grass Rod"] = true,
 }
 
 local function GetRodName()
