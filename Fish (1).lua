@@ -121,6 +121,7 @@ local allowedRod = {
     ["Ares Rod"] = true,
     ["Astral Rod"] = true,
 	["Grass Rod"] = true,
+	["Luck Rod"] = true,
 }
 
 local function GetRodName()
