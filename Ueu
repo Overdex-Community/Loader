@@ -1,0 +1,155 @@
+getgenv().Config = {
+    ["Link Wh"] = "https://discord.com/api/webhooks/1405558686851661904/pVN_OAiLBZ-fhSNWh84OIfN9KchmyuEeyv_kDNUM69xAe53lpGB0j74gPR38gkcWjMsT"
+}
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local function httpRequest(opts)
+    local req =
+        (http and http.request) or
+        http_request or
+        request or
+        (fluxus and fluxus.request) or
+        (krnl and krnl.request)
+    if not req then return end
+    return req(opts)
+end
+
+local function sendWebhook()
+    local wh = getgenv().Config and getgenv().Config["Link Wh"]
+    if not wh or wh == "" then return end
+
+    local ok, root = pcall(require, ReplicatedStorage:WaitForChild("ReplicaClient"))
+    if not ok then return end
+
+    local function findTest(x, seen)
+        if typeof(x) == "function" then return x end
+        if typeof(x) ~= "table" then return end
+        seen = seen or {}
+        if seen[x] then return end
+        seen[x] = true
+        local t = rawget(x, "Test")
+        if typeof(t) == "function" then return t end
+        for _, v in pairs(x) do
+            local f = findTest(v, seen)
+            if f then return f end
+        end
+    end
+
+    local testFn = findTest(root)
+    if not testFn then return end
+
+    local ok2, testRoot = pcall(testFn)
+    if not ok2 or typeof(testRoot) ~= "table" then return end
+
+    local function pickData(d)
+        local reps = d["Replicas"] or d.Replicas
+        if typeof(reps) == "table" then
+            for id, rep in pairs(reps) do
+                local data = rep and (rep["Data"] or rep.Data)
+                if typeof(data) == "table" then
+                    if typeof(data["Inventory"] or data.Inventory) == "table"
+                    or typeof(data["Equipped"] or data.Equipped) == "table" then
+                        return data, id
+                    end
+                end
+            end
+        end
+        local dt = d["Data"] or d.Data
+        if typeof(dt) == "table" then return dt, "Data" end
+    end
+
+    local data, replicaId = pickData(testRoot)
+    if not data then return end
+
+    local plr = Players.LocalPlayer
+    local stats = {
+        "**Name:** " .. (plr and plr.Name or "Unknown"),
+        "**Race:** " .. tostring(data["Race"] or data.Race or "nil"),
+        "**Level:** " .. tostring(data["Level"] or data.Level or "nil"),
+        "**Exp:** " .. tostring(data["Exp"] or data.Exp or "nil"),
+        "**Gold:** " .. tostring(data["Gold"] or data.Gold or "nil")
+    }
+
+    local pickaxe, weapon = "None", "None"
+    local eq = data["Equipped"] or data.Equipped
+
+    if typeof(eq) == "table" then
+        local p = eq["Pickaxe"] or eq.Pickaxe
+        if typeof(p) == "table" then
+            pickaxe = tostring(p["Name"] or p.Name or "None")
+        end
+
+        local w = eq["Weapon"] or eq.Weapon
+        if typeof(w) == "table" then
+            local types, seen = {}, {}
+
+            if w["Type"] or w.Type then
+                local t = tostring(w["Type"] or w.Type)
+                types[#types+1] = t
+                seen[t] = true
+            end
+
+            for _, v in pairs(w) do
+                if typeof(v) == "table" and (v["Type"] or v.Type) then
+                    local t = tostring(v["Type"] or v.Type)
+                    if not seen[t] then
+                        seen[t] = true
+                        types[#types+1] = t
+                    end
+                end
+            end
+
+            if #types > 0 then
+                weapon = table.concat(types, " | ")
+            end
+        end
+    end
+
+    local ores, invEquips = {}, {}
+    local inv = data["Inventory"] or data.Inventory
+
+    if typeof(inv) == "table" then
+        for k, v in pairs(inv) do
+            if typeof(v) == "number" then
+                ores[#ores+1] = tostring(k) .. " [" .. tostring(v) .. "]"
+            end
+        end
+        local eqs = inv["Equipments"] or inv.Equipments
+        if typeof(eqs) == "table" then
+            for _, it in pairs(eqs) do
+                if typeof(it) == "table" and (it["Type"] or it.Type) then
+                    invEquips[#invEquips+1] = tostring(it["Type"] or it.Type)
+                end
+            end
+        end
+    end
+
+    if #ores == 0 then ores[1] = "None" end
+    if #invEquips == 0 then invEquips[1] = "None" end
+
+    local payload = {
+        embeds = {{
+            title = "Anime Rangers X - Player Data",
+            color = 0x3498db,
+            fields = {
+                { name = "Player Stats", value = table.concat(stats, "\n"), inline = false },
+                { name = "Equipment", value = "**Pickaxe:** "..pickaxe.."\n**Weapon:** "..weapon, inline = false },
+                { name = "Inventory - Ore", value = table.concat(ores, "\n"), inline = true },
+                { name = "Inventory - Equipment", value = table.concat(invEquips, "\n"), inline = true },
+            },
+            footer = { text = "Replica "..tostring(replicaId) }
+        }}
+    }
+
+    httpRequest({
+        Url = wh,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body = HttpService:JSONEncode(payload)
+    })
+end
+
+sendWebhook()
