@@ -1,6 +1,6 @@
 getgenv().Configs = {
-    ["Race You Want"] = {"Human","Shadow"},
-    ["Enter Code"] = {"Release","SorryForUpd"}
+    ["Race You Want"] = {"Angel","Demon"},
+    ["Enter Code"] = {"Release","FORG!"}
 }
 
 local function AutoRollRace()
@@ -68,7 +68,7 @@ local function AutoRollRace()
             rs.Shared.Packages.Knit.Services.RaceService.RF.Reroll:InvokeServer()
         end)
 
-        task.wait(5)
+        task.wait(0.1)
     end
 end
 
