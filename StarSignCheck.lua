@@ -15,7 +15,14 @@ end
 local FEED_DONE = false
 local QUEST_DONE = false
 local lastReported = {}
-
+local ITEM_KEYS = {
+    ["Moon Charm"] = "MoonCharm",
+    ["Pineapple"] = "Pineapple",
+    ["Strawberry"] = "Strawberry",
+    ["Blueberry"] = "Blueberry",
+    ["Sunflower Seed"] = "SunflowerSeed",
+    ["Treat"] = "Treat"
+}
 local BOND_ITEMS = {
     { Name = "Moon Charm", Value = 250 },
     { Name = "Pineapple", Value = 50 },
@@ -223,28 +230,57 @@ local function getBondLeft(col, row)
 
     return nil
 end
+local function getInventory()
+    local cache = getCache()
+    if not cache or not cache.Eggs then return {} end
+
+    local out = {}
+    for display, key in pairs(ITEM_KEYS) do
+        local amt = cache.Eggs[key]
+        if type(amt) == "number" then
+            out[display] = amt
+        else
+            out[display] = 0
+        end
+    end
+
+    return out
+end
 
 local function feedBond(col, row, bondLeft)
+    local inventory = getInventory()
+    local remaining = bondLeft
+
     for _, item in ipairs(BOND_ITEMS) do
+        if remaining <= 0 then break end
+
         if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
-            local count = math.floor(bondLeft / item.Value)
-            if count > 0 then
-                local args = {
-                    [1] = col,
-                    [2] = row,
-                    [3] = item.Name,
-                    [4] = count,
-                    [5] = false
-                }
+            local have = inventory[item.Name] or 0
+            if have > 0 then
+                local need = math.ceil(remaining / item.Value)
+                local use = math.min(have, need)
 
-                pcall(function()
-                    Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-                end)
+                if use > 0 then
+                    local args = {
+                        [1] = col,
+                        [2] = row,
+                        [3] = item.Name,
+                        [4] = use,
+                        [5] = false
+                    }
 
-                return true
+                    pcall(function()
+                        Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+                    end)
+
+                    remaining = remaining - (use * item.Value)
+                    task.wait(0.15)
+                end
             end
         end
     end
+
+    return remaining <= 0
 end
 
 local function autoFeedStep()
