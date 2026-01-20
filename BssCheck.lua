@@ -348,6 +348,6 @@ while true do
     checkStarSign()
     checkQuest()
     autoFeedStep()
-    buyTreat()
+    
     task.wait(5)
 end
