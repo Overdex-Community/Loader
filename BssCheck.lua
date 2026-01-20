@@ -247,7 +247,31 @@ local function getInventory()
     return out
 end
 
+local function buyTreat()
+    if not FeedConfig["Auto Buy Treat"] then return end
+
+    local cache = getCache()
+    if not cache or not cache.CoreStats or not cache.CoreStats.Honey then return end
+
+    local honey = cache.CoreStats.Honey
+    if type(honey) ~= "number" or honey < 10000000 then return end
+
+    local args = {
+        [1] = "Purchase",
+        [2] = {
+            ["Type"] = "Treat",
+            ["Amount"] = 1000,
+            ["Category"] = "Eggs"
+        }
+    }
+
+    pcall(function()
+        Events.ItemPackageEvent:InvokeServer(unpack(args))
+    end)
+end
+
 local function feedBond(col, row, bondLeft)
+    buyTreat()
     local inventory = getInventory()
     local remaining = bondLeft
 
