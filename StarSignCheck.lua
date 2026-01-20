@@ -5,7 +5,9 @@ local HttpService = game:GetService("HttpService")
 local Player = game.Players.LocalPlayer
 local Events = RS:WaitForChild("Events")
 
-local Config = getgenv().Config
+local Config = getgenv().Config or {}
+local FeedConfig = Config["Auto Feed"] or {}
+
 if Config["Check Quest"] == nil then
     Config["Check Quest"] = true
 end
@@ -14,13 +16,13 @@ local FEED_DONE = false
 local QUEST_DONE = false
 local lastReported = {}
 
-local TREAT_COST = {
-    [1] = 1,
-    [2] = 4,
-    [3] = 20,
-    [4] = 75,
-    [5] = 400,
-    [6] = 1500
+local BOND_ITEMS = {
+    { Name = "Moon Charm", Value = 250 },
+    { Name = "Pineapple", Value = 50 },
+    { Name = "Strawberry", Value = 50 },
+    { Name = "Blueberry", Value = 50 },
+    { Name = "Sunflower Seed", Value = 50 },
+    { Name = "Treat", Value = 10 }
 }
 
 local function getCache()
@@ -176,66 +178,73 @@ local function getBees()
     return bees
 end
 
-local function getTop7(bees)
+local function getTopBees(bees, amount)
     table.sort(bees, function(a, b)
         return a.level > b.level
     end)
 
     local out = {}
-    for i = 1, math.min(7, #bees) do
+    for i = 1, math.min(amount, #bees) do
         table.insert(out, bees[i])
     end
 
-    return #out == 7 and out or nil
+    return #out == amount and out or nil
 end
 
-local function getHoney()
-    return Player.CoreStats.Honey.Value
-end
-
-local function getTreatCount()
-    local cache = getCache()
-    if not cache or not cache.Items then return 0 end
-    return cache.Items.Treat or 0
-end
-
-local function buyTreat()
-    local args = {
-        [1] = "Purchase",
-        [2] = {
-            ["Type"] = "Treat",
-            ["Amount"] = 1000,
-            ["Category"] = "Eggs"
-        }
-    }
+local function getBondLeft(col, row)
+    local result
     pcall(function()
-        Events.ItemPackageEvent:InvokeServer(unpack(args))
+        result = Events.GetBondToLevel:InvokeServer(col, row)
     end)
+
+    if type(result) == "number" then
+        return result
+    end
+
+    if type(result) == "table" then
+        for _, v in pairs(result) do
+            if type(v) == "number" then
+                return v
+            end
+        end
+    end
+
+    return nil
 end
 
-local function feedBee(col, row, amount)
-    local args = {
-        [1] = col,
-        [2] = row,
-        [3] = "Treat",
-        [4] = amount,
-        [5] = false
-    }
-    pcall(function()
-        Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-    end)
+local function feedBond(col, row, bondLeft)
+    for _, item in ipairs(BOND_ITEMS) do
+        if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
+            local count = math.floor(bondLeft / item.Value)
+            if count > 0 then
+                local args = {
+                    [1] = col,
+                    [2] = row,
+                    [3] = item.Name,
+                    [4] = count,
+                    [5] = false
+                }
+
+                pcall(function()
+                    Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+                end)
+
+                return true
+            end
+        end
+    end
 end
 
 local function autoFeedStep()
-    if FEED_DONE or not Config["Auto Feed Lv 7"] then return end
+    if FEED_DONE or not FeedConfig["Enable"] then return end
 
     local bees = getBees()
-    local group = getTop7(bees)
+    local group = getTopBees(bees, FeedConfig["Bee Amount"] or 7)
     if not group then return end
 
     local done = true
     for _, b in pairs(group) do
-        if b.level < 7 then
+        if b.level < (FeedConfig["Bee Level"] or 7) then
             done = false
             break
         end
@@ -246,21 +255,15 @@ local function autoFeedStep()
         return
     end
 
-    if getHoney() >= 10000000 then
-        buyTreat()
-    end
-
-    local treats = getTreatCount()
-
     table.sort(group, function(a, b)
         return a.level < b.level
     end)
 
     for _, b in pairs(group) do
-        if b.level < 7 then
-            local need = TREAT_COST[b.level]
-            if treats >= need then
-                feedBee(b.col, b.row, need)
+        if b.level < (FeedConfig["Bee Level"] or 7) then
+            local bondLeft = getBondLeft(b.col, b.row)
+            if bondLeft and bondLeft > 0 then
+                feedBond(b.col, b.row, bondLeft)
                 break
             end
         end
