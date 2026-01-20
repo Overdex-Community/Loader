@@ -261,10 +261,12 @@ local function feedBond(col, row, bondLeft)
                 local use = math.min(have, need)
 
                 if use > 0 then
+                    local serverName = ITEM_KEYS[item.Name] or item.Name
+
                     local args = {
                         [1] = col,
                         [2] = row,
-                        [3] = item.Name,
+                        [3] = serverName,
                         [4] = use,
                         [5] = false
                     }
@@ -273,8 +275,8 @@ local function feedBond(col, row, bondLeft)
                         Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
                     end)
 
-                    remaining = remaining - (use * item.Value)
-                    task.wait(0.15)
+                    remaining -= (use * item.Value)
+                    task.wait(3)
                 end
             end
         end
