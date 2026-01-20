@@ -21,7 +21,8 @@ local ITEM_KEYS = {
     ["Silver"] = "Silver",
     ["Gold"] = "Gold",
     ["Diamond"] = "Diamond",
-    ["Star Egg"] = "Star"
+    ["Star Egg"] = "Star",
+    ["Basic"] = "Basic"
 }
 
 local BOND_ITEMS = {
