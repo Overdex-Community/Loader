@@ -131,7 +131,19 @@ local function checkStarSign()
 end
 
 local function getBeeCount()
-    return Player.CoreStats.Bees.Value
+    local cache = getCache()
+    if not cache or not cache.Honeycomb then return 0 end
+
+    local count = 0
+    for _, col in pairs(cache.Honeycomb) do
+        for _, bee in pairs(col) do
+            if bee and bee.Type and bee.Lvl then
+                count += 1
+            end
+        end
+    end
+
+    return count
 end
 
 local function checkQuest()
