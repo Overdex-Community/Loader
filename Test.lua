@@ -143,45 +143,49 @@ end
 
 local function findEmptySlot()
     local hives = Workspace:WaitForChild("Honeycombs")
-    local myHive
 
     for _, hive in ipairs(hives:GetChildren()) do
         local owner = hive:FindFirstChild("Owner")
-        if owner and owner.Value == Player.Name then
-            myHive = hive
-            break
+        local isMine = false
+
+        if owner and owner:IsA("ObjectValue") and owner.Value == Player then
+            isMine = true
+        elseif owner and owner:IsA("StringValue") and owner.Value == Player.Name then
+            isMine = true
+        elseif owner and owner:IsA("IntValue") and owner.Value == Player.UserId then
+            isMine = true
         end
-    end
 
-    if not myHive then return end
+        if isMine then
+            local cells = hive:WaitForChild("Cells")
+            local slots = {}
 
-    local cells = myHive:WaitForChild("Cells")
-    local ordered = {}
+            for _, cell in ipairs(cells:GetChildren()) do
+                local bee = cell:FindFirstChild("Bee")
+                local x = cell:FindFirstChild("CellX")
+                local y = cell:FindFirstChild("CellY")
 
-    for _, cell in ipairs(cells:GetChildren()) do
-        local bee = cell:FindFirstChild("Bee")
-        local x = cell:FindFirstChild("CellX")
-        local y = cell:FindFirstChild("CellY")
+                if bee and x and y and bee:IsA("ObjectValue") then
+                    table.insert(slots, {
+                        x = x.Value,
+                        y = y.Value,
+                        empty = bee.Value == nil
+                    })
+                end
+            end
 
-        if bee and x and y then
-            table.insert(ordered, {
-                x = x.Value,
-                y = y.Value,
-                hasBee = bee.Value ~= nil
-            })
-        end
-    end
+            table.sort(slots, function(a, b)
+                if a.x == b.x then
+                    return a.y < b.y
+                end
+                return a.x < b.x
+            end)
 
-    table.sort(ordered, function(a, b)
-        if a.x == b.x then
-            return a.y < b.y
-        end
-        return a.x < b.x
-    end)
-
-    for _, slot in ipairs(ordered) do
-        if not slot.hasBee then
-            return slot.x, slot.y
+            for _, s in ipairs(slots) do
+                if s.empty then
+                    return s.x, s.y
+                end
+            end
         end
     end
 end
