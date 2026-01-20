@@ -1,5 +1,4 @@
 
-
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Services = {
@@ -55,7 +54,8 @@ local ITEM_KEYS = {
     ["Treat"] = "Treat",
     ["Silver"] = "Silver",
     ["Gold"] = "Gold",
-    ["Diamond"] = "Diamond"
+    ["Diamond"] = "Diamond",
+    ["Star Egg"] = "Star"
 }
 
 local BOND_ITEMS = {
@@ -112,8 +112,7 @@ function Bees:getTop(list, n)
 end
 
 function Bees:count()
-    local list = self:getAll()
-    return #list
+    return #self:getAll()
 end
 
 function Bees:findEmpty()
@@ -227,6 +226,7 @@ end
 
 local FEED_DONE = false
 local QUEST_DONE = false
+local PRINTER_LAST = 0
 local lastReported = {}
 
 local function checkStarSign()
@@ -252,7 +252,7 @@ local function checkStarSign()
 end
 
 local function checkQuest()
-    if QUEST_DONE == true then return end
+    if QUEST_DONE then return end
     if getgenv().Config["Check Quest"] == false then return end
 
     local cache = Cache:get()
@@ -335,10 +335,30 @@ local function autoHatchStep()
     end
 end
 
+local function autoPrinterStep()
+    local cfg = getgenv().Config["Auto Printer"]
+    if not cfg or not cfg["Enable"] then return end
+
+    if tick() - PRINTER_LAST < 10 then return end
+
+    local inv = Inventory:get()
+    if (inv["Star Egg"] or 0) > 0 then
+        PRINTER_LAST = tick()
+        pcall(function()
+            Services.Events.StickerPrinterActivate:FireServer("Star Egg")
+        end)
+
+        sendWebhook("Star Egg roll printer!!!", {
+            { name = "Player", value = Services.Player.Name, inline = false }
+        })
+    end
+end
+
 while true do
     checkStarSign()
     checkQuest()
     autoFeedStep()
     autoHatchStep()
-    task.wait(3)
+    autoPrinterStep()
+    task.wait(5)
 end
