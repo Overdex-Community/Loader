@@ -141,35 +141,46 @@ local function getTopBees(bees, amount)
 end
 
 local function findEmptySlot()
-    local hive = getHive()
-    local cache = getCache()
-    if not hive or not cache or not cache.Honeycomb then return end
+    local hives = Workspace:WaitForChild("Honeycombs")
+    local myHive
 
-    local used = {}
-
-    for cx, col in pairs(cache.Honeycomb) do
-        for cy, bee in pairs(col) do
-            if bee and bee.Type then
-                local x = tonumber(tostring(cx):match("%d+"))
-                local y = tonumber(tostring(cy):match("%d+"))
-                if x and y then
-                    used[x .. "_" .. y] = true
-                end
-            end
+    for _, hive in ipairs(hives:GetChildren()) do
+        local owner = hive:FindFirstChild("Owner")
+        if owner and owner.Value == Player.Name then
+            myHive = hive
+            break
         end
     end
 
-    local cells = hive:FindFirstChild("Cells")
-    if not cells then return end
+    if not myHive then return end
 
-    for _, cell in pairs(cells:GetChildren()) do
-        local pos = cell.Name
-        local x, y = pos:match("(%d+)%D+(%d+)")
-        if x and y then
-            local key = x .. "_" .. y
-            if not used[key] then
-                return tonumber(x), tonumber(y)
-            end
+    local cells = myHive:WaitForChild("Cells")
+    local ordered = {}
+
+    for _, cell in ipairs(cells:GetChildren()) do
+        local bee = cell:FindFirstChild("Bee")
+        local x = cell:FindFirstChild("CellX")
+        local y = cell:FindFirstChild("CellY")
+
+        if bee and x and y then
+            table.insert(ordered, {
+                x = x.Value,
+                y = y.Value,
+                hasBee = bee.Value ~= nil
+            })
+        end
+    end
+
+    table.sort(ordered, function(a, b)
+        if a.x == b.x then
+            return a.y < b.y
+        end
+        return a.x < b.x
+    end)
+
+    for _, slot in ipairs(ordered) do
+        if not slot.hasBee then
+            return slot.x, slot.y
         end
     end
 end
