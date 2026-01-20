@@ -250,11 +250,12 @@ end
 local function buyTreat()
     if not FeedConfig["Auto Buy Treat"] then return end
 
-    local cache = getCache()
-    if not cache or not cache.CoreStats or not cache.CoreStats.Honey then return end
+    local honeyVal = Player
+        and Player:FindFirstChild("CoreStats")
+        and Player.CoreStats:FindFirstChild("Honey")
 
-    local honey = cache.CoreStats.Honey
-    if type(honey) ~= "number" or honey < 10000000 then return end
+    if not honeyVal then return end
+    if honeyVal.Value < 10000000 then return end
 
     local args = {
         [1] = "Purchase",
