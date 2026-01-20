@@ -310,6 +310,69 @@ local function feedBond(col, row, bondLeft)
     return remaining <= 0
 end
 
+local function getEggInventory()
+    local cache = getCache()
+    if not cache or not cache.Eggs then return {} end
+
+    local out = {}
+    for _, name in ipairs((Config["Auto Hatch"] or {})["Egg Hatch"] or {}) do
+        local key = EGG_KEYS[name]
+        local amt = key and cache.Eggs[key]
+        out[name] = type(amt) == "number" and amt or 0
+    end
+
+    return out
+end
+
+local function findEmptySlot()
+    local cache = getCache()
+    if not cache or not cache.Honeycomb then return nil end
+
+    for cx, col in pairs(cache.Honeycomb) do
+        for cy, bee in pairs(col) do
+            if not bee or not bee.Type then
+                local x = tonumber(tostring(cx):match("%d+"))
+                local y = tonumber(tostring(cy):match("%d+"))
+                if x and y then
+                    return x, y
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+local function autoHatchStep()
+    local cfg = Config["Auto Hatch"]
+    if not cfg or not cfg["Enable"] then return end
+
+    local eggs = getEggInventory()
+    local col, row = findEmptySlot()
+    if not col or not row then return end
+
+    for _, eggName in ipairs(cfg["Egg Hatch"] or {}) do
+        if (eggs[eggName] or 0) > 0 then
+            local args = {
+                [1] = col,
+                [2] = row,
+                [3] = eggName,
+                [4] = 1,
+                [5] = false
+            }
+
+            pcall(function()
+                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+            end)
+
+            task.wait(3)
+            break
+        end
+    end
+end
+
+
+
 local function autoFeedStep()
     if FEED_DONE or not FeedConfig["Enable"] then return end
 
@@ -349,6 +412,6 @@ while true do
     checkStarSign()
     checkQuest()
     autoFeedStep()
-    
+    autoHatchStep()
     task.wait(5)
 end
