@@ -26,11 +26,14 @@ local ITEM_KEYS = {
 }
 
 local BOND_ITEMS = {
-    { Name = "Moon Charm", Value = 250 },
+    { Name = "Neonberry", Value = 500 },
+    { Name = "MoonCharm", Value = 250 },
+    { Name = "GingerbreadBear", Value = 250 },
+    { Name = "Bitterberry", Value = 100 },
     { Name = "Pineapple", Value = 50 },
     { Name = "Strawberry", Value = 50 },
     { Name = "Blueberry", Value = 50 },
-    { Name = "Sunflower Seed", Value = 50 },
+    { Name = "SunflowerSeed", Value = 50 },
     { Name = "Treat", Value = 10 }
 }
 
@@ -259,28 +262,115 @@ local function feedBee(col, row, bondLeft)
 end
 
 local function autoFeed()
-    local cfg = getgenv().Config["Auto Feed"]
-    if not cfg or not cfg["Enable"] or FEED_DONE then return end
+    if FEED_DONE or not FeedConfig["Enable"] then return end
 
-    local bees = getBees()
-    local group = getTopBees(bees, cfg["Bee Amount"])
-    if not group then return end
+    local cache = getCache()
+    if not cache or not cache.Honeycomb then return end
 
-    table.sort(group, function(a,b)
-        return a.level < b.level
-    end)
-
-    for _, b in pairs(group) do
-        if b.level < cfg["Bee Level"] then
-            local bond = getBondLeft(b.col, b.row)
-            if bond and bond > 0 then
-                feedBee(b.col, b.row, bond)
-                return
+    local bees = {}
+    for cx, col in pairs(cache.Honeycomb) do
+        for cy, bee in pairs(col) do
+            if bee and bee.Lvl then
+                local x = tonumber(tostring(cx):match("%d+"))
+                local y = tonumber(tostring(cy):match("%d+"))
+                if x and y then
+                    table.insert(bees, {
+                        col = x,
+                        row = y,
+                        level = bee.Lvl
+                    })
+                end
             end
         end
     end
 
-    FEED_DONE = true
+    table.sort(bees, function(a, b)
+        return a.level > b.level
+    end)
+
+    local maxCount = FeedConfig["Bee Amount"] or 7
+    local targetLevel = FeedConfig["Bee Level"] or 7
+
+    local group = {}
+    for i = 1, math.min(maxCount, #bees) do
+        table.insert(group, bees[i])
+    end
+    if #group < maxCount then return end
+
+    local allDone = true
+    for _, b in ipairs(group) do
+        if b.level < targetLevel then
+            allDone = false
+            break
+        end
+    end
+    if allDone then
+        FEED_DONE = true
+        return
+    end
+
+    table.sort(group, function(a, b)
+        return a.level < b.level
+    end)
+
+    for _, b in ipairs(group) do
+        if b.level < targetLevel then
+            local bondLeft = getBondLeft(b.col, b.row)
+            if not bondLeft or bondLeft <= 0 then return end
+
+            local inv = getInventory()
+            local remaining = bondLeft
+
+            for _, item in ipairs(BOND_ITEMS) do
+                if remaining <= 0 then break end
+                if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
+                    local have = inv[item.Name] or 0
+                    local need = math.ceil(remaining / item.Value)
+                    local use = math.min(have, need)
+
+                    if use > 0 then
+                        local args = {
+                            [1] = b.col,
+                            [2] = b.row,
+                            [3] = item.Name,
+                            [4] = use,
+                            [5] = false
+                        }
+
+                        pcall(function()
+                            Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+                        end)
+
+                        remaining -= use * item.Value
+                        task.wait(3)
+                    end
+                end
+            end
+
+            if remaining > 0 and FeedConfig["Auto Buy Treat"] and checkSunflowerQuest() then
+                local treatsNeeded = math.ceil(remaining / 10)
+                local honey = getHoney()
+                local cost = treatsNeeded * 10000
+
+                if honey >= cost then
+                    local args = {
+                        [1] = "Purchase",
+                        [2] = {
+                            ["Type"] = "Treat",
+                            ["Amount"] = treatsNeeded,
+                            ["Category"] = "Eggs"
+                        }
+                    }
+
+                    pcall(function()
+                        Events.ItemPackageEvent:InvokeServer(unpack(args))
+                    end)
+                end
+            end
+
+            break
+        end
+    end
 end
 
 local function autoHatch()
