@@ -1,4 +1,4 @@
-print("anh jung dz")
+print("anh jung dz v2")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Config = getgenv().Config
@@ -341,47 +341,69 @@ end
 
 local STICKER_TYPES = getStickerTypes()
 local STICKER_ID_MAP = STICKER_TYPES and buildIDMap(STICKER_TYPES) or {}
-
+local LAST_SIGNS = {}
+local HAS_STAR_SIGN = false
+local WROTE_STATUS = false
+local NO_STAR_TIMER = 0
 local function checkStarSign()
+    if WROTE_STATUS then return end
+    if not Config["Auto Change Acc"] then return end
+
     local cache = getCache()
     if not cache then return end
 
     local received = deepFind(cache, "Received")
     if not received then return end
 
-    local inventory = {}
-    local found = false
+    local foundThisTick = false
+    HAS_STAR_SIGN = false
 
     for id, amount in pairs(received) do
         local name = STICKER_ID_MAP[tonumber(id)]
         if name and name:lower():find("star sign") then
-            inventory[name] = amount
-        end
-    end
+            HAS_STAR_SIGN = true
 
-    for name, amt in pairs(inventory) do
-        found = true
-        if not LAST_SIGNS[name] or amt > LAST_SIGNS[name] then
-            local list = ""
-            for n, c in pairs(inventory) do
-                list = list .. "- " .. n .. ": " .. c .. "\n"
+            if not LAST_SIGNS[name] or amount > LAST_SIGNS[name] then
+                foundThisTick = true
+
+                sendWebhook("Star Sign collected!!!", {
+                    { name = "Player", value = Player.Name, inline = false },
+                    { name = "Star Sign", value = name, inline = false },
+                    { name = "Amount", value = tostring(amount), inline = false }
+                }, 65280)
+
+                LAST_SIGNS[name] = amount
             end
-
-            sendWebhook("Star Sign collected!!!", {
-                { name = "Player", value = Player.Name, inline = false },
-                { name = "Star Sign", value = name, inline = false },
-                { name = "Amount", value = tostring(amt), inline = false },
-                { name = "Inventory", value = list ~= "" and list or "None", inline = false }
-            }, 65280)
-
-            writeStatus("Completed-CoStarSign")
-            LAST_SIGNS[name] = amt
-            STAR_TIMER = 0
         end
     end
 
-    if QUEST_DONE and not found and STAR_TIMER == 0 then
-        STAR_TIMER = tick()
+    local beeCount = #getBees()
+    local playTime = tonumber(deepFind(cache, "PlayTime"))
+
+    if HAS_STAR_SIGN and beeCount >= 20 and playTime == 28900 then
+        local filename = Player.Name .. ".txt"
+        writefile(filename, "Completed-CoStarSign")
+        WROTE_STATUS = true
+        return
+    end
+
+    if QUEST_DONE then
+        local inv = getInventory()
+        local hasStarEgg = (inv["Star Egg"] or 0) > 0
+
+        if not hasStarEgg and not foundThisTick then
+            if NO_STAR_TIMER == 0 then
+                NO_STAR_TIMER = tick()
+            end
+        else
+            NO_STAR_TIMER = 0
+        end
+
+        if NO_STAR_TIMER > 0 and tick() - NO_STAR_TIMER >= 20 then
+            local filename = Player.Name .. ".txt"
+            writefile(filename, "Completed-KoStarSign")
+            WROTE_STATUS = true
+        end
     end
 end
 
