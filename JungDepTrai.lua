@@ -152,30 +152,25 @@ local function findEmptySlot()
 
     for _, hive in ipairs(hives:GetChildren()) do
         local owner = hive:FindFirstChild("Owner")
-        local isMine = false
-
-        if owner and owner:IsA("ObjectValue") and owner.Value == Player then
-            isMine = true
-        elseif owner and owner:IsA("StringValue") and owner.Value == Player.Name then
-            isMine = true
-        elseif owner and owner:IsA("IntValue") and owner.Value == Player.UserId then
-            isMine = true
-        end
+        local isMine =
+            (owner and owner:IsA("ObjectValue") and owner.Value == Player) or
+            (owner and owner:IsA("StringValue") and owner.Value == Player.Name) or
+            (owner and owner:IsA("IntValue") and owner.Value == Player.UserId)
 
         if isMine then
-            local cells = hive:WaitForChild("Cells")
             local slots = {}
 
-            for _, cell in ipairs(cells:GetChildren()) do
-                local bee = cell:FindFirstChild("Bee")
+            for _, cell in ipairs(hive.Cells:GetChildren()) do
+                local cellType = cell:FindFirstChild("CellType")
                 local x = cell:FindFirstChild("CellX")
                 local y = cell:FindFirstChild("CellY")
+                local locked = cell:FindFirstChild("CellLocked")
 
-                if bee and x and y and bee:IsA("ObjectValue") then
+                if cellType and x and y and locked and not locked.Value then
                     table.insert(slots, {
                         x = x.Value,
                         y = y.Value,
-                        empty = bee.Value == nil
+                        empty = (cellType.Value == "" or tostring(cellType.Value):lower() == "empty")
                     })
                 end
             end
