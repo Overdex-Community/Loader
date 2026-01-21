@@ -32,13 +32,13 @@ local ITEM_KEYS = {
 
 local BOND_ITEMS = {
     { Name = "Neonberry", Value = 500 },
-    { Name = "MoonCharm", Value = 250 },
-    { Name = "GingerbreadBear", Value = 250 },
+    { Name = "Moon Charm", Value = 250 },
+    { Name = "Gingerbread Bear", Value = 250 },
     { Name = "Bitterberry", Value = 100 },
     { Name = "Pineapple", Value = 50 },
     { Name = "Strawberry", Value = 50 },
     { Name = "Blueberry", Value = 50 },
-    { Name = "SunflowerSeed", Value = 50 },
+    { Name = "Sunflower Seed", Value = 50 },
     { Name = "Treat", Value = 10 }
 }
 
