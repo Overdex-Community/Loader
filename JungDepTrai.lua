@@ -1,6 +1,7 @@
 print("anh jung dz")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
-
+local Config = getgenv().Config
+local FeedConfig = Config["Auto Feed"] or {}
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
