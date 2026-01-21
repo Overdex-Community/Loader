@@ -345,6 +345,28 @@ local LAST_SIGNS = {}
 local HAS_STAR_SIGN = false
 local WROTE_STATUS = false
 local NO_STAR_TIMER = 0
+local function checkQuest()
+    if QUEST_DONE or Config["Check Quest"] == false then return end
+
+    local cache = getCache()
+    if not cache then return end
+
+    local completed = deepFind(cache, "Completed")
+    if not completed then return end
+
+    for _, q in pairs(completed) do
+        if tostring(q) == "Seven To Seven" then
+            sendWebhook("Quest Seven To Seven done!!!!!", {
+                { name = "Player", value = Player.Name, inline = false },
+                { name = "Bee Count", value = tostring(#getBees()), inline = false }
+            }, 16776960)
+
+            QUEST_DONE = true
+            STAR_TIMER = tick()
+            break
+        end
+    end
+end
 local function checkStarSign()
     if WROTE_STATUS then return end
     if not Config["Auto Change Acc"] then return end
@@ -407,28 +429,7 @@ local function checkStarSign()
     end
 end
 
-local function checkQuest()
-    if QUEST_DONE or Config["Check Quest"] == false then return end
 
-    local cache = getCache()
-    if not cache then return end
-
-    local completed = deepFind(cache, "Completed")
-    if not completed then return end
-
-    for _, q in pairs(completed) do
-        if tostring(q) == "Seven To Seven" then
-            sendWebhook("Quest Seven To Seven done!!!!!", {
-                { name = "Player", value = Player.Name, inline = false },
-                { name = "Bee Count", value = tostring(#getBees()), inline = false }
-            }, 16776960)
-
-            QUEST_DONE = true
-            STAR_TIMER = tick()
-            break
-        end
-    end
-end
 
 local function handleStarTimeout()
     if not QUEST_DONE then return end
