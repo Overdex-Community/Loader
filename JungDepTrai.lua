@@ -23,6 +23,7 @@ local ITEM_KEYS = {
     GingerbreadBear = "GingerbreadBear",
     Treat = "Treat",
     Silver = "Silver",
+    Ticket = "Ticket",
     Gold = "Gold",
     Diamond = "Diamond",
     ["Star Egg"] = "Star",
@@ -596,8 +597,35 @@ local function checkStarSign()
         end
     end
 end
+local LAST_EGG_BUY = 0
 
+local function autoBuyEggTicket()
+    local cfg = getgenv().Config["Auto Buy Egg Ticket"]
+    if cfg == false then return end
+
+    if tick() - LAST_EGG_BUY < 10 then return end
+
+    local inv = getInventory()
+    local tickets = inv["Ticket"] or 0
+    if tickets < 50 then return end
+
+    LAST_EGG_BUY = tick()
+
+    local args = {
+        [1] = "Purchase",
+        [2] = {
+            ["Type"] = "Silver",
+            ["Amount"] = 1,
+            ["Category"] = "Eggs"
+        }
+    }
+
+    pcall(function()
+        Events.ItemPackageEvent:InvokeServer(unpack(args))
+    end)
+end
 while true do
+    autoBuyEggTicket()
     checkStarSign()
     autoFeed()
     autoHatch()
