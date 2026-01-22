@@ -1,4 +1,4 @@
-print("anh jung dz v13")
+print("anh jung dz v14")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 local Config = getgenv().Config
 local FeedConfig = Config["Auto Feed"] or {}
@@ -568,10 +568,11 @@ local function checkStarSign()
     local cache = getCache()
     if not cache then return end
 
-    local received = deepFind(cache, "Received")
-    if not received then return end
+    local received = deepFind(cache, "Received") or {}
+    local completed = deepFind(cache, "Completed") or {}
 
     local hasEverFound = false
+    local foundThisTick = false
 
     for id, amount in pairs(received) do
         local name = STICKER_ID_MAP and STICKER_ID_MAP[tonumber(id)]
@@ -580,6 +581,8 @@ local function checkStarSign()
 
             local last = STATE.LAST_SIGNS[name] or 0
             if amount > last then
+                foundThisTick = true
+
                 sendWebhook("Star Sign collected!!!", {
                     { name = "Player", value = Player.Name, inline = false },
                     { name = "Star Sign", value = name, inline = false },
@@ -594,24 +597,34 @@ local function checkStarSign()
     local beeCount = #getBees()
     local playTime = tonumber(deepFind(cache, "PlayTime")) or 0
 
-    -- CoStarSign: đã từng có Star Sign, đủ ong, playtime >= mốc
+    -- Check quest done trực tiếp từ cache
+    local questDone = false
+    for _, q in pairs(completed) do
+        if tostring(q) == "Seven To Seven" then
+            questDone = true
+            break
+        end
+    end
+
+    -- CoStarSign
     if hasEverFound and beeCount >= 20 and playTime >= 28900 then
         writeStatus("Completed-CoStarSign")
         STATE.WROTE_STATUS = true
         return
     end
 
-    -- KoStarSign: xong quest, không có Star Egg, và chưa từng nhặt Star Sign
-    if STATE.QUEST_DONE and not hasEverFound then
+    -- KoStarSign
+    if questDone and not hasEverFound then
         local inv = getInventory()
-        local hasStarEgg = (inv["Star Egg"] or 0) > 0
+        local hasStarEgg = (inv["StarEgg"] or 0) > 0
 
-        if not hasStarEgg then
+        if not hasStarEgg and not foundThisTick then
             if STATE.NO_STAR_TIMER == 0 then
                 STATE.NO_STAR_TIMER = tick()
             elseif tick() - STATE.NO_STAR_TIMER >= 20 then
                 writeStatus("Completed-KoStarSign")
                 STATE.WROTE_STATUS = true
+                return
             end
         else
             STATE.NO_STAR_TIMER = 0
