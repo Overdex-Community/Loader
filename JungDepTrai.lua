@@ -1,4 +1,4 @@
-print("anh jung dz v11")
+print("anh jung dz v12")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 local Config = getgenv().Config
 local FeedConfig = Config["Auto Feed"] or {}
@@ -346,14 +346,34 @@ local function autoFeed()
 
     local completed = deepFind(cache, "Completed") or {}
     local currentQuest = getCurrentQuest(completed)
-
     if not currentQuest then
         FEED_DONE = true
         return
     end
 
-    local isFinalQuest = (currentQuest == "Seven To Seven")
+    local freeTreat = (currentQuest == "Seven To Seven")
     local reserveTreat, reserveFruits = getGlobalReserve(completed)
+
+    if FeedConfig["Auto Buy Treat"] and not freeTreat then
+        local inv = getInventory()
+        local have = inv["Treat"] or 0
+        local need = reserveTreat or 0
+
+        if have < need then
+            local buy = need - have
+            local honey = Player.CoreStats.Honey.Value
+            local cost = buy * 10000
+
+            if honey >= cost then
+                Events.ItemPackageEvent:InvokeServer("Purchase", {
+                    Type = "Treat",
+                    Amount = buy,
+                    Category = "Eggs"
+                })
+            end
+            return
+        end
+    end
 
     local bees = getBees()
     table.sort(bees, function(a, b)
@@ -379,7 +399,7 @@ local function autoFeed()
                 if FeedConfig["Bee Food"][item.Name] then
                     local keep = 0
 
-                    if not isFinalQuest then
+                    if not freeTreat then
                         if item.Name == "Treat" then
                             keep = reserveTreat
                         end
@@ -401,7 +421,6 @@ local function autoFeed()
                                 use,
                                 false
                             )
-
                             remaining -= use * item.Value
                             task.wait(2)
                         end
@@ -409,7 +428,7 @@ local function autoFeed()
                 end
             end
 
-            if isFinalQuest and remaining > 0 and FeedConfig["Auto Buy Treat"] then
+            if freeTreat and remaining > 0 and FeedConfig["Auto Buy Treat"] then
                 local treatsNeeded = math.ceil(remaining / 10)
                 local honey = Player.CoreStats.Honey.Value
                 local cost = treatsNeeded * 10000
