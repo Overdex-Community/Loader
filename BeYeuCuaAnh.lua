@@ -1,4 +1,4 @@
-print("anh jung dz v2")
+print("anh jung dz v3")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Config = getgenv().Config
