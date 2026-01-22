@@ -1,4 +1,4 @@
-print("anh jung dz v5")
+print("anh jung dz v6")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Config = getgenv().Config
@@ -51,21 +51,6 @@ local BOND_ITEMS = {
     { Name = "Treat", Value = 10 }
 }
 
-local QUEST_DATA = {
-    ["Treat Tutorial"] = { Treat = 1 },
-    ["Bonding With Bees"] = { Treat = 5 },
-    ["Search For A Sunflower Seed"] = { Treat = 10, SunflowerSeed = 1 },
-    ["The Gist Of Jellies"] = { Treat = 15 },
-    ["Search For Strawberries"] = { Treat = 20, Strawberry = 5 },
-    ["Binging On Blueberries"] = { Treat = 30, Blueberry = 10 },
-    ["Royal Jelly Jamboree"] = { Treat = 50 },
-    ["Search For Sunflower Seeds"] = { Treat = 100, SunflowerSeed = 25 },
-    ["Picking Out Pineapples"] = { Treat = 250, Pineapple = 25 },
-    ["Seven To Seven"] = { Treat = 500, Blueberry = 25, Strawberry = 25 }
-}
-
--- ================= CORE =================
-
 local function getCache()
     if tick() - Cache.last > 1 then
         local ok, res = pcall(function()
@@ -114,9 +99,6 @@ local function writeStatus(text)
         writefile(Player.Name .. ".txt", text)
     end)
 end
-
--- ================= DATA =================
-
 local function getInventory()
     local cache = getCache()
     if not cache or not cache.Eggs then return {} end
@@ -151,9 +133,6 @@ local function getBondLeft(x,y)
     end)
     if ok and type(res) == "number" then return res end
 end
-
--- ================= QUEST =================
-
 local function getCurrentQuest()
     local cache = getCache()
     local completed = deepFind(cache,"Completed") or {}
@@ -165,8 +144,6 @@ local function getCurrentQuest()
         if not done then return name end
     end
 end
-
--- ================= AUTO FEED =================
 
 local function autoFeed()
     if FEED_DONE or not FeedConfig["Enable"] then return end
@@ -199,17 +176,32 @@ local function autoFeed()
         ["Seven To Seven"] = { ["Blueberry"] = 25, ["Strawberry"] = 25 }
     }
 
-    local currentQuest
-    for name, _ in pairs(QUEST_TREAT_REQ) do
-        local done = false
+    local QUEST_ORDER = {
+        "Treat Tutorial",
+        "Bonding With Bees",
+        "Search For A Sunflower Seed",
+        "The Gist Of Jellies",
+        "Search For Strawberries",
+        "Binging On Blueberries",
+        "Royal Jelly Jamboree",
+        "Search For Sunflower Seeds",
+        "Picking Out Pineapples",
+        "Seven To Seven"
+    }
+
+    local function isCompleted(name)
         for _, q in pairs(completed) do
             if tostring(q) == name then
-                done = true
-                break
+                return true
             end
         end
-        if not done then
-            currentQuest = name
+        return false
+    end
+
+    local currentQuest
+    for _, q in ipairs(QUEST_ORDER) do
+        if not isCompleted(q) then
+            currentQuest = q
             break
         end
     end
@@ -219,14 +211,15 @@ local function autoFeed()
         return
     end
 
-    local isLastQuest = (currentQuest == "Seven To Seven")
-    local reserveTreat = isLastQuest and 0 or (QUEST_TREAT_REQ[currentQuest] or 0)
-    local reserveFruits = isLastQuest and {} or (QUEST_FRUIT_REQ[currentQuest] or {})
+    local isFinalQuest = (currentQuest == "Seven To Seven")
+
+    local reserveTreat = QUEST_TREAT_REQ[currentQuest] or 0
+    local reserveFruits = QUEST_FRUIT_REQ[currentQuest] or {}
 
     local haveTreat = inv["Treat"] or 0
     local needTreat = reserveTreat - haveTreat
 
-    if needTreat > 0 and FeedConfig["Auto Buy Treat"] then
+    if needTreat > 0 then
         local honey = Player.CoreStats.Honey.Value
         local cost = needTreat * 10000
 
@@ -271,7 +264,8 @@ local function autoFeed()
                 if remaining <= 0 then break end
                 if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
                     local keep = 0
-                    if not isLastQuest then
+
+                    if not isFinalQuest then
                         if item.Name == "Treat" then
                             keep = reserveTreat
                         end
@@ -305,7 +299,7 @@ local function autoFeed()
                 end
             end
 
-            if remaining > 0 and FeedConfig["Auto Buy Treat"] then
+            if isFinalQuest and remaining > 0 then
                 local treatsNeeded = math.ceil(remaining / 10)
                 local honey = Player.CoreStats.Honey.Value
                 local cost = treatsNeeded * 10000
@@ -330,8 +324,6 @@ local function autoFeed()
         end
     end
 end
-
--- ================= AUTO HATCH =================
 
 local function findEmptySlot()
     for _,hive in ipairs(Workspace.Honeycombs:GetChildren()) do
@@ -376,9 +368,6 @@ local function autoHatch()
         end
     end
 end
-
--- ================= AUTO PRINTER =================
-
 local function autoPrinter()
     local cfg = Config["Auto Printer"]
     if not cfg or not cfg.Enable then return end
@@ -393,9 +382,6 @@ local function autoPrinter()
         },16777215)
     end
 end
-
--- ================= STAR SIGN =================
-
 local function checkStarSign()
     if STATE.WROTE_STATUS then return end
     local cache = getCache()
@@ -434,7 +420,6 @@ local function checkStarSign()
     end
 end
 
--- ================= QUEST CHECK =================
 
 local function checkQuest()
     if STATE.QUEST_DONE or not Config["Check Quest"] then return end
@@ -450,9 +435,6 @@ local function checkQuest()
         end
     end
 end
-
--- ================= LOOP =================
-
 while true do
     autoFeed()
     autoHatch()
