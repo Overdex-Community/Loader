@@ -1,4 +1,4 @@
-print("anh jung dz v8")
+print("anh jung dz v9"}
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Config = getgenv().Config
@@ -356,20 +356,7 @@ local function autoHatch()
         end
     end
 end
-local function autoPrinter()
-    local cfg = Config["Auto Printer"]
-    if not cfg or not cfg.Enable then return end
-    if tick() - STATE.PRINTER_CD < 10 then return end
 
-    local inv = getInventory()
-    if (inv["Star Egg"] or 0) > 0 then
-        STATE.PRINTER_CD = tick()
-        Events.StickerPrinterActivate:FireServer("Star Egg")
-        sendWebhook("Star Egg roll printer!!!",{
-            {name="Player",value=Player.Name,inline=false}
-        },16777215)
-    end
-end
 local function getStickerTypes()
     local folder = RS:FindFirstChild("Stickers", true)
     if not folder then return end
@@ -453,19 +440,39 @@ local function checkStarSign()
         end
     end
 end
+local function autoPrinter()
+    local cfg = getgenv().Config["Auto Printer"]
+    if not cfg or not cfg["Enable"] then return end
+    if tick() - PRINTER_CD < 10 then return end
+
+    local inv = getInventory()
+    if (inv["Star Egg"] or 0) > 0 then
+        PRINTER_CD = tick()
+        Events.StickerPrinterActivate:FireServer("Star Egg")
+
+        sendWebhook("Star Egg roll printer!!!", {
+            { name = "Player", value = Player.Name, inline = false }
+        }, 16777215)
+    end
+end
+
 local function checkQuest()
-    if STATE.QUEST_DONE or not Config["Check Quest"] then return end
+    if QUEST_DONE or getgenv().Config["Check Quest"] == false then return end
 
     local cache = getCache()
-    if not cache or not cache.Completed then return end
+    if not cache then return end
 
-    for _,q in pairs(cache.Completed) do
+    local completed = deepFind(cache, "Completed")
+    if not completed then return end
+
+    for _, q in pairs(completed) do
         if tostring(q) == "Seven To Seven" then
-            STATE.QUEST_DONE = true
-            sendWebhook("Quest Seven To Seven done!", {
-                {name = "Player", value = Player.Name, inline = false},
-                {name = "Bee Count", value = tostring(#getBees()), inline = false}
+            sendWebhook("Quest Seven To Seven done!!!!!", {
+                { name = "Player", value = Player.Name, inline = false },
+                { name = "Bee Count", value = tostring(#getBees()), inline = false }
             }, 16776960)
+
+            QUEST_DONE = true
             return
         end
     end
