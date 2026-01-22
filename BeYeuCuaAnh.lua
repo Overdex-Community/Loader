@@ -198,9 +198,60 @@ end
 local function autoFeed()
     if FEED_DONE or not FeedConfig["Enable"] then return end
 
+    local cache = getCache()
+    if not cache then return end
+
+    local completed = deepFind(cache, "Completed") or {}
+    local inv = getInventory()
+
+    local QUEST_TREAT_REQ = {
+        ["Treat Tutorial"] = 1,
+        ["Bonding With Bees"] = 5,
+        ["Search For A Sunflower Seed"] = 10,
+        ["The Gist Of Jellies"] = 15,
+        ["Search For Strawberries"] = 20,
+        ["Binging On Blueberries"] = 30,
+        ["Royal Jelly Jamboree"] = 50,
+        ["Search For Sunflower Seeds"] = 100,
+        ["Picking Out Pineapples"] = 250,
+        ["Seven To Seven"] = 500
+    }
+
+    local QUEST_FRUIT_REQ = {
+        ["Search For A Sunflower Seed"] = { SunflowerSeed = 1 },
+        ["Search For Strawberries"] = { Strawberry = 5 },
+        ["Binging On Blueberries"] = { Blueberry = 10 },
+        ["Search For Sunflower Seeds"] = { SunflowerSeed = 25 },
+        ["Picking Out Pineapples"] = { Pineapple = 25 },
+        ["Seven To Seven"] = { Blueberry = 25, Strawberry = 25 }
+    }
+
+    local currentQuest
+    for name,_ in pairs(QUEST_TREAT_REQ) do
+        local done = false
+        for _,q in pairs(completed) do
+            if tostring(q) == name then
+                done = true
+                break
+            end
+        end
+        if not done then
+            currentQuest = name
+            break
+        end
+    end
+
+    if not currentQuest then
+        FEED_DONE = true
+        return
+    end
+
+    local reserveTreat = QUEST_TREAT_REQ[currentQuest] or 0
+    local reserveFruits = QUEST_FRUIT_REQ[currentQuest] or {}
+
     local bees = getBees()
-    table.sort(bees, function(a, b)
-        return a.level > b.level
+    table.sort(bees, function(a,b)
+        return a.level < b.level
     end)
 
     local maxCount = FeedConfig["Bee Amount"] or 7
@@ -208,27 +259,8 @@ local function autoFeed()
 
     local group = {}
     for i = 1, math.min(maxCount, #bees) do
-        group[i] = bees[i]
+        table.insert(group, bees[i])
     end
-    if #group < maxCount then return end
-
-    local allDone = true
-    for _, b in ipairs(group) do
-        if b.level < targetLevel then
-            allDone = false
-            break
-        end
-    end
-    if allDone then
-        FEED_DONE = true
-        return
-    end
-
-    table.sort(group, function(a, b)
-        return a.level < b.level
-    end)
-
-    local inv = getInventory()
 
     for _, b in ipairs(group) do
         if b.level < targetLevel then
@@ -236,33 +268,66 @@ local function autoFeed()
             if not bondLeft or bondLeft <= 0 then return end
 
             local remaining = bondLeft
+            local inventory = getInventory()
 
             for _, item in ipairs(BOND_ITEMS) do
                 if remaining <= 0 then break end
                 if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
-                    local have = inv[item.Name] or 0
-                    local need = math.ceil(remaining / item.Value)
-                    local use = math.min(have, need)
+                    local keep = 0
+                    if item.Name == "Treat" then
+                        keep = reserveTreat
+                    end
+                    if reserveFruits[item.Name] then
+                        keep = reserveFruits[item.Name]
+                    end
 
-                    if use > 0 then
-                        local args = {
-                            [1] = b.col,
-                            [2] = b.row,
-                            [3] = ITEM_KEYS[item.Name],
-                            [4] = use,
-                            [5] = false
-                        }
+                    local have = (inventory[item.Name] or 0) - keep
+                    if have > 0 then
+                        local need = math.ceil(remaining / item.Value)
+                        local use = math.min(have, need)
 
-                        pcall(function()
-                            Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-                        end)
+                        if use > 0 then
+                            local args = {
+                                [1] = b.col,
+                                [2] = b.row,
+                                [3] = ITEM_KEYS[item.Name],
+                                [4] = use,
+                                [5] = false
+                            }
 
-                        remaining -= use * item.Value
-                        task.wait(3)
+                            pcall(function()
+                                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+                            end)
+
+                            remaining -= use * item.Value
+                            task.wait(2)
+                        end
                     end
                 end
             end
-            break
+
+            if remaining > 0 and FeedConfig["Auto Buy Treat"] then
+                local treatsNeeded = math.ceil(remaining / 10)
+                local honey = Player.CoreStats.Honey.Value
+                local cost = treatsNeeded * 10000
+
+                if honey >= cost then
+                    local args = {
+                        [1] = "Purchase",
+                        [2] = {
+                            ["Type"] = "Treat",
+                            ["Amount"] = treatsNeeded,
+                            ["Category"] = "Eggs"
+                        }
+                    }
+
+                    pcall(function()
+                        Events.ItemPackageEvent:InvokeServer(unpack(args))
+                    end)
+                end
+            end
+
+            return
         end
     end
 end
