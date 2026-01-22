@@ -260,31 +260,80 @@ local function feedBee(col, row, bondLeft)
     end
 end
 
+local QUEST_ORDER = {
+    "Treat Tutorial",
+    "Bonding With Bees",
+    "Search For A Sunflower Seed",
+    "The Gist Of Jellies",
+    "Search For Strawberries",
+    "Binging On Blueberries",
+    "Royal Jelly Jamboree",
+    "Search For Sunflower Seeds",
+    "Picking Out Pineapples",
+    "Seven To Seven"
+}
+
+local QUEST_TREAT_REQ = {
+    ["Treat Tutorial"] = 1,
+    ["Bonding With Bees"] = 5,
+    ["Search For A Sunflower Seed"] = 10,
+    ["The Gist Of Jellies"] = 15,
+    ["Search For Strawberries"] = 20,
+    ["Binging On Blueberries"] = 30,
+    ["Royal Jelly Jamboree"] = 50,
+    ["Search For Sunflower Seeds"] = 100,
+    ["Picking Out Pineapples"] = 250,
+    ["Seven To Seven"] = 500
+}
+
+local QUEST_FRUIT_REQ = {
+    ["Search For A Sunflower Seed"] = { ["Sunflower Seed"] = 1 },
+    ["Search For Strawberries"] = { ["Strawberry"] = 5 },
+    ["Binging On Blueberries"] = { ["Blueberry"] = 10 },
+    ["Search For Sunflower Seeds"] = { ["Sunflower Seed"] = 25 },
+    ["Picking Out Pineapples"] = { ["Pineapple"] = 25 },
+    ["Seven To Seven"] = { ["Blueberry"] = 25, ["Strawberry"] = 25 }
+}
+
+local function isQuestCompleted(list, name)
+    for _, q in pairs(list or {}) do
+        if tostring(q) == name then
+            return true
+        end
+    end
+    return false
+end
+
+local function getCurrentQuest(completed)
+    for _, q in ipairs(QUEST_ORDER) do
+        if not isQuestCompleted(completed, q) then
+            return q
+        end
+    end
+end
+
 local function autoFeed()
     if FEED_DONE or not FeedConfig["Enable"] then return end
 
     local cache = getCache()
-    if not cache or not cache.Honeycomb then return end
+    if not cache then return end
 
-    local bees = {}
-    for cx, col in pairs(cache.Honeycomb) do
-        for cy, bee in pairs(col) do
-            if bee and bee.Lvl then
-                local x = tonumber(tostring(cx):match("%d+"))
-                local y = tonumber(tostring(cy):match("%d+"))
-                if x and y then
-                    table.insert(bees, {
-                        col = x,
-                        row = y,
-                        level = bee.Lvl
-                    })
-                end
-            end
-        end
+    local completed = deepFind(cache, "Completed") or {}
+    local currentQuest = getCurrentQuest(completed)
+
+    if not currentQuest then
+        FEED_DONE = true
+        return
     end
 
+    local isFinalQuest = (currentQuest == "Seven To Seven")
+
+    local reserveTreat = QUEST_TREAT_REQ[currentQuest] or 0
+    local reserveFruits = QUEST_FRUIT_REQ[currentQuest] or {}
+
+    local bees = getBees()
     table.sort(bees, function(a, b)
-        return a.level > b.level
+        return a.level < b.level
     end)
 
     local maxCount = FeedConfig["Bee Amount"] or 7
@@ -292,63 +341,57 @@ local function autoFeed()
 
     local group = {}
     for i = 1, math.min(maxCount, #bees) do
-        table.insert(group, bees[i])
+        group[#group + 1] = bees[i]
     end
-    if #group < maxCount then return end
-
-    local allDone = true
-    for _, b in ipairs(group) do
-        if b.level < targetLevel then
-            allDone = false
-            break
-        end
-    end
-    if allDone then
-        FEED_DONE = true
-        return
-    end
-
-    table.sort(group, function(a, b)
-        return a.level < b.level
-    end)
 
     for _, b in ipairs(group) do
-        if b.level < targetLevel then
-            local bondLeft = getBondLeft(b.col, b.row)
-            if not bondLeft or bondLeft <= 0 then return end
-
-            local inv = getInventory()
+        local bondLeft = getBondLeft(b.col, b.row)
+        if bondLeft and bondLeft > 0 then
             local remaining = bondLeft
+            local inventory = getInventory()
 
             for _, item in ipairs(BOND_ITEMS) do
                 if remaining <= 0 then break end
                 if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
-                    local have = inv[item.Name] or 0
-                    local need = math.ceil(remaining / item.Value)
-                    local use = math.min(have, need)
+                    local keep = 0
 
-                    if use > 0 then
-                        local args = {
-                            [1] = b.col,
-                            [2] = b.row,
-                            [3] = item.Name,
-                            [4] = use,
-                            [5] = false
-                        }
+                    if not isFinalQuest then
+                        if item.Name == "Treat" then
+                            keep = reserveTreat
+                        end
+                        if reserveFruits[item.Name] then
+                            keep = reserveFruits[item.Name]
+                        end
+                    end
 
-                        pcall(function()
-                            Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-                        end)
+                    local have = (inventory[item.Name] or 0) - keep
+                    if have > 0 then
+                        local need = math.ceil(remaining / item.Value)
+                        local use = math.min(have, need)
 
-                        remaining -= use * item.Value
-                        task.wait(3)
+                        if use > 0 then
+                            local args = {
+                                [1] = b.col,
+                                [2] = b.row,
+                                [3] = ITEM_KEYS[item.Name],
+                                [4] = use,
+                                [5] = false
+                            }
+
+                            pcall(function()
+                                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+                            end)
+
+                            remaining -= use * item.Value
+                            task.wait(2)
+                        end
                     end
                 end
             end
 
-            if remaining > 0 and FeedConfig["Auto Buy Treat"] and checkSunflowerQuest() then
+            if isFinalQuest and remaining > 0 then
                 local treatsNeeded = math.ceil(remaining / 10)
-                local honey = getHoney()
+                local honey = Player.CoreStats.Honey.Value
                 local cost = treatsNeeded * 10000
 
                 if honey >= cost then
@@ -367,11 +410,10 @@ local function autoFeed()
                 end
             end
 
-            break
+            return
         end
     end
 end
-
 local function autoHatch()
     local cfg = getgenv().Config["Auto Hatch"]
     if not cfg or not cfg["Enable"] then return end
