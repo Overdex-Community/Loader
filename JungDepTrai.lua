@@ -13,20 +13,20 @@ local Events = RS:WaitForChild("Events")
 local Cache = { data = nil, last = 0 }
 
 local ITEM_KEYS = {
-    ["Moon Charm"] = "MoonCharm",
-    ["Pineapple"] = "Pineapple",
-    ["Strawberry"] = "Strawberry",
-    ["Blueberry"] = "Blueberry",
-    ["Sunflower Seed"] = "SunflowerSeed",
-    ["Bitterberry"] = "Bitterberry",
-    ["Neonberry"] = "Neonberry",
-    ["Gingerbread Bear"] = "GingerbreadBear",
-    ["Treat"] = "Treat",
-    ["Silver"] = "Silver",
-    ["Gold"] = "Gold",
-    ["Diamond"] = "Diamond",
+    MoonCharm = "MoonCharm",
+    Pineapple = "Pineapple",
+    Strawberry = "Strawberry",
+    Blueberry = "Blueberry",
+    SunflowerSeed = "SunflowerSeed",
+    Bitterberry = "Bitterberry",
+    Neonberry = "Neonberry",
+    GingerbreadBear = "GingerbreadBear",
+    Treat = "Treat",
+    Silver = "Silver",
+    Gold = "Gold",
+    Diamond = "Diamond",
     ["Star Egg"] = "Star",
-    ["Basic"] = "Basic"
+    Basic = "Basic"
 }
 
 local BOND_ITEMS = {
@@ -287,13 +287,15 @@ local QUEST_TREAT_REQ = {
 }
 
 local QUEST_FRUIT_REQ = {
-    ["Search For A Sunflower Seed"] = { ["Sunflower Seed"] = 1 },
-    ["Search For Strawberries"] = { ["Strawberry"] = 5 },
-    ["Binging On Blueberries"] = { ["Blueberry"] = 10 },
-    ["Search For Sunflower Seeds"] = { ["Sunflower Seed"] = 25 },
-    ["Picking Out Pineapples"] = { ["Pineapple"] = 25 },
-    ["Seven To Seven"] = { ["Blueberry"] = 25, ["Strawberry"] = 25 }
+    ["Search For A Sunflower Seed"] = { SunflowerSeed = 1 },
+    ["Search For Strawberries"] = { Strawberry = 5 },
+    ["Binging On Blueberries"] = { Blueberry = 10 },
+    ["Search For Sunflower Seeds"] = { SunflowerSeed = 25 },
+    ["Picking Out Pineapples"] = { Pineapple = 25 },
+    ["Seven To Seven"] = { Blueberry = 25, Strawberry = 25 }
 }
+
+
 
 local function isQuestCompleted(list, name)
     for _, q in pairs(list or {}) do
@@ -311,7 +313,30 @@ local function getCurrentQuest(completed)
         end
     end
 end
+local function getGlobalReserve(completed)
+    local reserveTreat = 0
+    local reserveFruits = {}
+    local started = false
 
+    for _, q in ipairs(QUEST_ORDER) do
+        if not isQuestCompleted(completed, q) then
+            started = true
+        end
+
+        if started then
+            reserveTreat += QUEST_TREAT_REQ[q] or 0
+
+            local fruits = QUEST_FRUIT_REQ[q]
+            if fruits then
+                for name, amt in pairs(fruits) do
+                    reserveFruits[name] = (reserveFruits[name] or 0) + amt
+                end
+            end
+        end
+    end
+
+    return reserveTreat, reserveFruits
+end
 local function autoFeed()
     if FEED_DONE or not FeedConfig["Enable"] then return end
 
@@ -327,9 +352,7 @@ local function autoFeed()
     end
 
     local isFinalQuest = (currentQuest == "Seven To Seven")
-
-    local reserveTreat = QUEST_TREAT_REQ[currentQuest] or 0
-    local reserveFruits = QUEST_FRUIT_REQ[currentQuest] or {}
+    local reserveTreat, reserveFruits = getGlobalReserve(completed)
 
     local bees = getBees()
     table.sort(bees, function(a, b)
@@ -352,7 +375,7 @@ local function autoFeed()
 
             for _, item in ipairs(BOND_ITEMS) do
                 if remaining <= 0 then break end
-                if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
+                if FeedConfig["Bee Food"][item.Name] then
                     local keep = 0
 
                     if not isFinalQuest then
@@ -370,17 +393,13 @@ local function autoFeed()
                         local use = math.min(have, need)
 
                         if use > 0 then
-                            local args = {
-                                [1] = b.col,
-                                [2] = b.row,
-                                [3] = ITEM_KEYS[item.Name],
-                                [4] = use,
-                                [5] = false
-                            }
-
-                            pcall(function()
-                                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-                            end)
+                            Events.ConstructHiveCellFromEgg:InvokeServer(
+                                b.col,
+                                b.row,
+                                ITEM_KEYS[item.Name],
+                                use,
+                                false
+                            )
 
                             remaining -= use * item.Value
                             task.wait(2)
@@ -389,24 +408,17 @@ local function autoFeed()
                 end
             end
 
-            if isFinalQuest and remaining > 0 then
+            if isFinalQuest and remaining > 0 and FeedConfig["Auto Buy Treat"] then
                 local treatsNeeded = math.ceil(remaining / 10)
                 local honey = Player.CoreStats.Honey.Value
                 local cost = treatsNeeded * 10000
 
                 if honey >= cost then
-                    local args = {
-                        [1] = "Purchase",
-                        [2] = {
-                            ["Type"] = "Treat",
-                            ["Amount"] = treatsNeeded,
-                            ["Category"] = "Eggs"
-                        }
-                    }
-
-                    pcall(function()
-                        Events.ItemPackageEvent:InvokeServer(unpack(args))
-                    end)
+                    Events.ItemPackageEvent:InvokeServer("Purchase", {
+                        Type = "Treat",
+                        Amount = treatsNeeded,
+                        Category = "Eggs"
+                    })
                 end
             end
 
