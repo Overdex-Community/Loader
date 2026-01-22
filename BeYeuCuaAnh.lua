@@ -1,4 +1,4 @@
-print("anh jung dz v6")
+print("anh jung dz v7")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Config = getgenv().Config
@@ -224,22 +224,19 @@ local function autoFeed()
         local cost = needTreat * 10000
 
         if honey >= cost then
-            local args = {
-                [1] = "Purchase",
-                [2] = {
-                    ["Type"] = "Treat",
-                    ["Amount"] = needTreat,
-                    ["Category"] = "Eggs"
-                }
-            }
             pcall(function()
-                Events.ItemPackageEvent:InvokeServer(unpack(args))
+                Events.ItemPackageEvent:InvokeServer("Purchase", {
+                    Type = "Treat",
+                    Amount = needTreat,
+                    Category = "Eggs"
+                })
             end)
         end
-        return
     end
 
     local bees = getBees()
+    if #bees == 0 then return end
+
     table.sort(bees, function(a, b)
         return a.level < b.level
     end)
@@ -247,80 +244,71 @@ local function autoFeed()
     local maxCount = FeedConfig["Bee Amount"] or 7
     local targetLevel = FeedConfig["Bee Level"] or 7
 
-    local group = {}
+    local targetBee
+
     for i = 1, math.min(maxCount, #bees) do
-        group[#group + 1] = bees[i]
+        if bees[i].level < targetLevel then
+            targetBee = bees[i]
+            break
+        end
     end
 
-    for _, b in ipairs(group) do
-        if b.level < targetLevel then
-            local bondLeft = getBondLeft(b.col, b.row)
-            if not bondLeft or bondLeft <= 0 then return end
+    if not targetBee then
+        targetBee = bees[1]
+    end
 
-            local remaining = bondLeft
-            local inventory = getInventory()
+    local bondLeft = getBondLeft(targetBee.col, targetBee.row)
+    if not bondLeft or bondLeft <= 0 then return end
 
-            for _, item in ipairs(BOND_ITEMS) do
-                if remaining <= 0 then break end
-                if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
-                    local keep = 0
+    local remaining = bondLeft
+    local inventory = getInventory()
 
-                    if not isFinalQuest then
-                        if item.Name == "Treat" then
-                            keep = reserveTreat
-                        end
-                        if reserveFruits[item.Name] then
-                            keep = reserveFruits[item.Name]
-                        end
-                    end
-
-                    local have = (inventory[item.Name] or 0) - keep
-                    if have > 0 then
-                        local need = math.ceil(remaining / item.Value)
-                        local use = math.min(have, need)
-
-                        if use > 0 then
-                            local args = {
-                                [1] = b.col,
-                                [2] = b.row,
-                                [3] = ITEM_KEYS[item.Name],
-                                [4] = use,
-                                [5] = false
-                            }
-
-                            pcall(function()
-                                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-                            end)
-
-                            remaining -= use * item.Value
-                            task.wait(2)
-                        end
-                    end
+    for _, item in ipairs(BOND_ITEMS) do
+        if remaining <= 0 then break end
+        if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
+            local keep = 0
+            if not isFinalQuest then
+                if item.Name == "Treat" then
+                    keep = reserveTreat
+                end
+                if reserveFruits[item.Name] then
+                    keep = reserveFruits[item.Name]
                 end
             end
 
-            if isFinalQuest and remaining > 0 then
-                local treatsNeeded = math.ceil(remaining / 10)
-                local honey = Player.CoreStats.Honey.Value
-                local cost = treatsNeeded * 10000
+            local have = (inventory[item.Name] or 0) - keep
+            if have > 0 then
+                local use = math.min(have, math.ceil(remaining / item.Value))
 
-                if honey >= cost then
-                    local args = {
-                        [1] = "Purchase",
-                        [2] = {
-                            ["Type"] = "Treat",
-                            ["Amount"] = treatsNeeded,
-                            ["Category"] = "Eggs"
-                        }
-                    }
+                pcall(function()
+                    Events.ConstructHiveCellFromEgg:InvokeServer(
+                        targetBee.col,
+                        targetBee.row,
+                        ITEM_KEYS[item.Name],
+                        use,
+                        false
+                    )
+                end)
 
-                    pcall(function()
-                        Events.ItemPackageEvent:InvokeServer(unpack(args))
-                    end)
-                end
+                remaining -= use * item.Value
+                task.wait(2)
             end
+        end
+    end
 
-            return
+    if isFinalQuest and remaining > 0 then
+        local treatsNeeded = math.ceil(remaining / 10)
+        local honey = Player.CoreStats.Honey.Value
+        local cost = treatsNeeded * 10000
+
+        if honey >= cost then
+            pcall(function()
+                Events.ItemPackageEvent:InvokeServer("Purchase", {
+                    Type = "Treat",
+                    Amount = treatsNeeded,
+                    Category = "Eggs"
+                })
+            end)
         end
     end
 end
