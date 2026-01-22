@@ -1,4 +1,4 @@
-print("anh jung dz")
+print("anh jung dz v10")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 local Config = getgenv().Config
 local FeedConfig = Config["Auto Feed"] or {}
@@ -513,37 +513,74 @@ local STICKER_ID_MAP = STICKER_TYPES and buildIDMap(STICKER_TYPES) or {}
 
 local LAST_SIGNS = {}
 
+local STATE = {
+    QUEST_DONE = false,
+    WROTE_STATUS = false,
+    NO_STAR_TIMER = 0,
+    PRINTER_CD = 0,
+    LAST_SIGNS = {}
+}
+
+local function writeStatus(text)
+    if not Config["Auto Change Acc"] then return end
+    pcall(function()
+        writefile(Player.Name .. ".txt", text)
+    end)
+end
+
 local function checkStarSign()
+    if STATE.WROTE_STATUS then return end
+
     local cache = getCache()
     if not cache then return end
 
     local received = deepFind(cache, "Received")
     if not received then return end
 
-    local inventory = {}
+    local hasEverFound = false
 
     for id, amount in pairs(received) do
-        local name = STICKER_ID_MAP[tonumber(id)]
+        local name = STICKER_ID_MAP and STICKER_ID_MAP[tonumber(id)]
         if name and name:lower():find("star sign") then
-            inventory[name] = amount
+            hasEverFound = true
+
+            local last = STATE.LAST_SIGNS[name] or 0
+            if amount > last then
+                sendWebhook("Star Sign collected!!!", {
+                    { name = "Player", value = Player.Name, inline = false },
+                    { name = "Star Sign", value = name, inline = false },
+                    { name = "Amount", value = tostring(amount), inline = false }
+                }, 65280)
+
+                STATE.LAST_SIGNS[name] = amount
+            end
         end
     end
 
-    for name, amt in pairs(inventory) do
-        if not LAST_SIGNS[name] or amt > LAST_SIGNS[name] then
-            local list = ""
-            for n, c in pairs(inventory) do
-                list = list .. "- " .. n .. ": " .. c .. "\n"
+    local beeCount = #getBees()
+    local playTime = tonumber(deepFind(cache, "PlayTime")) or 0
+
+    -- CoStarSign: đã từng có Star Sign, đủ ong, playtime >= mốc
+    if hasEverFound and beeCount >= 20 and playTime >= 28900 then
+        writeStatus("Completed-CoStarSign")
+        STATE.WROTE_STATUS = true
+        return
+    end
+
+    -- KoStarSign: xong quest, không có Star Egg, và chưa từng nhặt Star Sign
+    if STATE.QUEST_DONE and not hasEverFound then
+        local inv = getInventory()
+        local hasStarEgg = (inv["Star Egg"] or 0) > 0
+
+        if not hasStarEgg then
+            if STATE.NO_STAR_TIMER == 0 then
+                STATE.NO_STAR_TIMER = tick()
+            elseif tick() - STATE.NO_STAR_TIMER >= 20 then
+                writeStatus("Completed-KoStarSign")
+                STATE.WROTE_STATUS = true
             end
-
-            sendWebhook("Star Sign collected!!!", {
-                { name = "Player", value = Player.Name, inline = false },
-                { name = "Star Sign", value = name, inline = false },
-                { name = "Amount", value = tostring(amt), inline = false },
-                { name = "Inventory", value = list ~= "" and list or "None", inline = false }
-            }, 65280)
-
-            LAST_SIGNS[name] = amt
+        else
+            STATE.NO_STAR_TIMER = 0
         end
     end
 end
