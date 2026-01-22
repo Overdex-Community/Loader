@@ -1,8 +1,9 @@
-print("anh jung dz v3")
+print("anh jung dz v4")
 repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
 
 local Config = getgenv().Config
 local FeedConfig = Config["Auto Feed"] or {}
+
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
@@ -12,6 +13,14 @@ local Player = Players.LocalPlayer
 local Events = RS:WaitForChild("Events")
 
 local Cache = { data = nil, last = 0 }
+
+local STATE = {
+    QUEST_DONE = false,
+    WROTE_STATUS = false,
+    NO_STAR_TIMER = 0,
+    PRINTER_CD = 0,
+    LAST_SIGNS = {}
+}
 
 local ITEM_KEYS = {
     ["Moon Charm"] = "MoonCharm",
@@ -42,12 +51,20 @@ local BOND_ITEMS = {
     { Name = "Treat", Value = 10 }
 }
 
-local LAST_SIGNS = {}
-local QUEST_DONE = false
-local FEED_DONE = false
-local PRINTER_CD = 0
-local STAR_TIMER = 0
-local ACC_CHANGED = false
+local QUEST_DATA = {
+    ["Treat Tutorial"] = { Treat = 1 },
+    ["Bonding With Bees"] = { Treat = 5 },
+    ["Search For A Sunflower Seed"] = { Treat = 10, SunflowerSeed = 1 },
+    ["The Gist Of Jellies"] = { Treat = 15 },
+    ["Search For Strawberries"] = { Treat = 20, Strawberry = 5 },
+    ["Binging On Blueberries"] = { Treat = 30, Blueberry = 10 },
+    ["Royal Jelly Jamboree"] = { Treat = 50 },
+    ["Search For Sunflower Seeds"] = { Treat = 100, SunflowerSeed = 25 },
+    ["Picking Out Pineapples"] = { Treat = 250, Pineapple = 25 },
+    ["Seven To Seven"] = { Treat = 500, Blueberry = 25, Strawberry = 25 }
+}
+
+-- ================= CORE =================
 
 local function getCache()
     if tick() - Cache.last > 1 then
@@ -62,55 +79,49 @@ local function getCache()
     return Cache.data
 end
 
-local function writeStatus(text)
-    if not Config["Auto Change Acc"] then return end
-    local name = Player.Name .. ".txt"
-    pcall(function()
-        writefile(name, text)
-    end)
-end
-
-local function sendWebhook(title, fields, color)
-    local data = {
-        content = "<@" .. tostring(Config["Ping Id"]) .. ">",
-        embeds = {{
-            title = title,
-            color = color,
-            fields = fields,
-            footer = { text = "made by Jung Ganmyeon" }
-        }}
-    }
-
-    pcall(function()
-        request({
-            Url = Config["Link Wh"],
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = Http:JSONEncode(data)
-        })
-    end)
-end
-
-local function deepFind(tbl, key, seen)
-    seen = seen or {}
-    if seen[tbl] then return end
-    seen[tbl] = true
-
-    for k, v in pairs(tbl) do
-        if k == key then return v end
-        if type(v) == "table" then
-            local f = deepFind(v, key, seen)
+local function deepFind(t, k)
+    for a,b in pairs(t) do
+        if a == k then return b end
+        if type(b) == "table" then
+            local f = deepFind(b, k)
             if f then return f end
         end
     end
 end
 
+local function sendWebhook(title, fields, color)
+    pcall(function()
+        request({
+            Url = Config["Link Wh"],
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = Http:JSONEncode({
+                content = "<@" .. tostring(Config["Ping Id"]) .. ">",
+                embeds = {{
+                    title = title,
+                    color = color,
+                    fields = fields,
+                    footer = { text = "made by Jung Ganmyeon" }
+                }}
+            })
+        })
+    end)
+end
+
+local function writeStatus(text)
+    if not Config["Auto Change Acc"] then return end
+    pcall(function()
+        writefile(Player.Name .. ".txt", text)
+    end)
+end
+
+-- ================= DATA =================
+
 local function getInventory()
     local cache = getCache()
     if not cache or not cache.Eggs then return {} end
-
     local inv = {}
-    for name, key in pairs(ITEM_KEYS) do
+    for name,key in pairs(ITEM_KEYS) do
         inv[name] = tonumber(cache.Eggs[key]) or 0
     end
     return inv
@@ -120,18 +131,13 @@ local function getBees()
     local cache = getCache()
     local bees = {}
     if not cache or not cache.Honeycomb then return bees end
-
-    for cx, col in pairs(cache.Honeycomb) do
-        for cy, bee in pairs(col) do
+    for cx,col in pairs(cache.Honeycomb) do
+        for cy,bee in pairs(col) do
             if bee and bee.Lvl then
                 local x = tonumber(tostring(cx):match("%d+"))
                 local y = tonumber(tostring(cy):match("%d+"))
                 if x and y then
-                    table.insert(bees, {
-                        col = x,
-                        row = y,
-                        level = bee.Lvl
-                    })
+                    table.insert(bees, {col=x,row=y,level=bee.Lvl})
                 end
             end
         end
@@ -139,379 +145,215 @@ local function getBees()
     return bees
 end
 
-local function findEmptySlot()
-    for _, hive in ipairs(Workspace.Honeycombs:GetChildren()) do
-        local owner = hive:FindFirstChild("Owner")
-        local isMine =
-            (owner and owner:IsA("ObjectValue") and owner.Value == Player) or
-            (owner and owner:IsA("StringValue") and owner.Value == Player.Name) or
-            (owner and owner:IsA("IntValue") and owner.Value == Player.UserId)
+local function getBondLeft(x,y)
+    local ok,res = pcall(function()
+        return Events.GetBondToLevel:InvokeServer(x,y)
+    end)
+    if ok and type(res) == "number" then return res end
+end
 
-        if isMine then
-            local slots = {}
+-- ================= QUEST =================
 
-            for _, cell in ipairs(hive.Cells:GetChildren()) do
-                local cellType = cell:FindFirstChild("CellType")
-                local x = cell:FindFirstChild("CellX")
-                local y = cell:FindFirstChild("CellY")
-                local locked = cell:FindFirstChild("CellLocked")
+local function getCurrentQuest()
+    local cache = getCache()
+    local completed = deepFind(cache,"Completed") or {}
+    for name,_ in pairs(QUEST_DATA) do
+        local done = false
+        for _,q in pairs(completed) do
+            if tostring(q) == name then done = true break end
+        end
+        if not done then return name end
+    end
+end
 
-                if cellType and x and y and locked and not locked.Value then
-                    table.insert(slots, {
-                        x = x.Value,
-                        y = y.Value,
-                        empty = (cellType.Value == "" or tostring(cellType.Value):lower() == "empty")
+-- ================= AUTO FEED =================
+
+local function autoFeed()
+    if not FeedConfig.Enable then return end
+
+    local quest = getCurrentQuest()
+    if not quest then return end
+
+    local isLast = (quest == "Seven To Seven")
+    local reserve = QUEST_DATA[quest] or {}
+
+    local bees = getBees()
+    table.sort(bees,function(a,b) return a.level < b.level end)
+
+    local max = FeedConfig["Bee Amount"] or 7
+    local target = FeedConfig["Bee Level"] or 7
+
+    for i=1,math.min(max,#bees) do
+        local b = bees[i]
+        if b.level < target then
+            local bond = getBondLeft(b.col,b.row)
+            if not bond then return end
+
+            local inv = getInventory()
+            local remain = bond
+
+            for _,item in ipairs(BOND_ITEMS) do
+                if remain <= 0 then break end
+                if FeedConfig["Bee Food"][item.Name] then
+                    local keep = isLast and 0 or (reserve[item.Name] or 0)
+                    local have = (inv[item.Name] or 0) - keep
+                    if have > 0 then
+                        local use = math.min(have, math.ceil(remain/item.Value))
+                        local args = {
+                            b.col, b.row,
+                            ITEM_KEYS[item.Name],
+                            use, false
+                        }
+                        Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
+                        remain -= use * item.Value
+                        task.wait(2)
+                    end
+                end
+            end
+
+            if remain > 0 and FeedConfig["Auto Buy Treat"] then
+                local need = math.ceil(remain/10)
+                local honey = Player.CoreStats.Honey.Value
+                if honey >= need*10000 then
+                    Events.ItemPackageEvent:InvokeServer("Purchase",{
+                        Type="Treat",
+                        Amount=need,
+                        Category="Eggs"
                     })
                 end
             end
-
-            table.sort(slots, function(a, b)
-                if a.x == b.x then
-                    return a.y < b.y
-                end
-                return a.x < b.x
-            end)
-
-            for _, s in ipairs(slots) do
-                if s.empty then
-                    return s.x, s.y
-                end
-            end
-        end
-    end
-end
-
-local function getBondLeft(col, row)
-    local result
-    pcall(function()
-        result = Events.GetBondToLevel:InvokeServer(col, row)
-    end)
-
-    if type(result) == "number" then return result end
-    if type(result) == "table" then
-        for _, v in pairs(result) do
-            if type(v) == "number" then return v end
-        end
-    end
-end
-
-local function autoFeed()
-    if FEED_DONE or not FeedConfig["Enable"] then return end
-
-    local cache = getCache()
-    if not cache then return end
-
-    local completed = deepFind(cache, "Completed") or {}
-    local inv = getInventory()
-
-    local QUEST_TREAT_REQ = {
-        ["Treat Tutorial"] = 1,
-        ["Bonding With Bees"] = 5,
-        ["Search For A Sunflower Seed"] = 10,
-        ["The Gist Of Jellies"] = 15,
-        ["Search For Strawberries"] = 20,
-        ["Binging On Blueberries"] = 30,
-        ["Royal Jelly Jamboree"] = 50,
-        ["Search For Sunflower Seeds"] = 100,
-        ["Picking Out Pineapples"] = 250,
-        ["Seven To Seven"] = 500
-    }
-
-    local QUEST_FRUIT_REQ = {
-        ["Search For A Sunflower Seed"] = { SunflowerSeed = 1 },
-        ["Search For Strawberries"] = { Strawberry = 5 },
-        ["Binging On Blueberries"] = { Blueberry = 10 },
-        ["Search For Sunflower Seeds"] = { SunflowerSeed = 25 },
-        ["Picking Out Pineapples"] = { Pineapple = 25 },
-        ["Seven To Seven"] = { Blueberry = 25, Strawberry = 25 }
-    }
-
-    local currentQuest
-    for name,_ in pairs(QUEST_TREAT_REQ) do
-        local done = false
-        for _,q in pairs(completed) do
-            if tostring(q) == name then
-                done = true
-                break
-            end
-        end
-        if not done then
-            currentQuest = name
-            break
-        end
-    end
-
-    if not currentQuest then
-        FEED_DONE = true
-        return
-    end
-
-    local reserveTreat = QUEST_TREAT_REQ[currentQuest] or 0
-    local reserveFruits = QUEST_FRUIT_REQ[currentQuest] or {}
-
-    local bees = getBees()
-    table.sort(bees, function(a,b)
-        return a.level < b.level
-    end)
-
-    local maxCount = FeedConfig["Bee Amount"] or 7
-    local targetLevel = FeedConfig["Bee Level"] or 7
-
-    local group = {}
-    for i = 1, math.min(maxCount, #bees) do
-        table.insert(group, bees[i])
-    end
-
-    for _, b in ipairs(group) do
-        if b.level < targetLevel then
-            local bondLeft = getBondLeft(b.col, b.row)
-            if not bondLeft or bondLeft <= 0 then return end
-
-            local remaining = bondLeft
-            local inventory = getInventory()
-
-            for _, item in ipairs(BOND_ITEMS) do
-                if remaining <= 0 then break end
-                if FeedConfig["Bee Food"] and FeedConfig["Bee Food"][item.Name] then
-                    local keep = 0
-                    if item.Name == "Treat" then
-                        keep = reserveTreat
-                    end
-                    if reserveFruits[item.Name] then
-                        keep = reserveFruits[item.Name]
-                    end
-
-                    local have = (inventory[item.Name] or 0) - keep
-                    if have > 0 then
-                        local need = math.ceil(remaining / item.Value)
-                        local use = math.min(have, need)
-
-                        if use > 0 then
-                            local args = {
-                                [1] = b.col,
-                                [2] = b.row,
-                                [3] = ITEM_KEYS[item.Name],
-                                [4] = use,
-                                [5] = false
-                            }
-
-                            pcall(function()
-                                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-                            end)
-
-                            remaining -= use * item.Value
-                            task.wait(2)
-                        end
-                    end
-                end
-            end
-
-            if remaining > 0 and FeedConfig["Auto Buy Treat"] then
-                local treatsNeeded = math.ceil(remaining / 10)
-                local honey = Player.CoreStats.Honey.Value
-                local cost = treatsNeeded * 10000
-
-                if honey >= cost then
-                    local args = {
-                        [1] = "Purchase",
-                        [2] = {
-                            ["Type"] = "Treat",
-                            ["Amount"] = treatsNeeded,
-                            ["Category"] = "Eggs"
-                        }
-                    }
-
-                    pcall(function()
-                        Events.ItemPackageEvent:InvokeServer(unpack(args))
-                    end)
-                end
-            end
-
             return
+        end
+    end
+end
+
+-- ================= AUTO HATCH =================
+
+local function findEmptySlot()
+    for _,hive in ipairs(Workspace.Honeycombs:GetChildren()) do
+        local owner = hive:FindFirstChild("Owner")
+        if owner and tostring(owner.Value) == Player.Name then
+            local slots = {}
+            for _,cell in ipairs(hive.Cells:GetChildren()) do
+                local ct = cell:FindFirstChild("CellType")
+                local x = cell:FindFirstChild("CellX")
+                local y = cell:FindFirstChild("CellY")
+                local lock = cell:FindFirstChild("CellLocked")
+                if ct and x and y and lock and not lock.Value then
+                    table.insert(slots,{
+                        x=x.Value,y=y.Value,
+                        empty=(ct.Value=="")
+                    })
+                end
+            end
+            table.sort(slots,function(a,b)
+                return a.x==b.x and a.y<b.y or a.x<b.x
+            end)
+            for _,s in ipairs(slots) do
+                if s.empty then return s.x,s.y end
+            end
         end
     end
 end
 
 local function autoHatch()
     local cfg = Config["Auto Hatch"]
-    if not cfg or not cfg["Enable"] then return end
+    if not cfg or not cfg.Enable then return end
 
-    local col, row = findEmptySlot()
-    if not col then return end
+    local x,y = findEmptySlot()
+    if not x then return end
 
     local inv = getInventory()
-
-    for _, egg in ipairs(cfg["Egg Hatch"]) do
+    for _,egg in ipairs(cfg["Egg Hatch"]) do
         if (inv[egg] or 0) > 0 then
-            local args = {
-                [1] = col,
-                [2] = row,
-                [3] = egg,
-                [4] = 1,
-                [5] = false
-            }
-
-            pcall(function()
-                Events.ConstructHiveCellFromEgg:InvokeServer(unpack(args))
-            end)
-
+            Events.ConstructHiveCellFromEgg:InvokeServer(x,y,egg,1,false)
             task.wait(3)
             return
         end
     end
 end
 
+-- ================= AUTO PRINTER =================
+
 local function autoPrinter()
     local cfg = Config["Auto Printer"]
-    if not cfg or not cfg["Enable"] then return end
-    if tick() - PRINTER_CD < 10 then return end
+    if not cfg or not cfg.Enable then return end
+    if tick() - STATE.PRINTER_CD < 10 then return end
 
     local inv = getInventory()
     if (inv["Star Egg"] or 0) > 0 then
-        PRINTER_CD = tick()
+        STATE.PRINTER_CD = tick()
         Events.StickerPrinterActivate:FireServer("Star Egg")
-
-        sendWebhook("Star Egg roll printer!!!", {
-            { name = "Player", value = Player.Name, inline = false }
-        }, 16777215)
+        sendWebhook("Star Egg roll printer!!!",{
+            {name="Player",value=Player.Name,inline=false}
+        },16777215)
     end
 end
 
-local function getStickerTypes()
-    local folder = RS:FindFirstChild("Stickers", true)
-    if not folder then return end
-    local module = folder:FindFirstChild("StickerTypes")
-    if not module then return end
+-- ================= STAR SIGN =================
 
-    local ok, data = pcall(require, module)
-    return ok and data or nil
-end
-
-local function buildIDMap(tbl, map, seen)
-    map = map or {}
-    seen = seen or {}
-    if seen[tbl] then return map end
-    seen[tbl] = true
-
-    for k, v in pairs(tbl) do
-        if type(v) == "table" then
-            if v.ID then
-                map[tonumber(v.ID)] = tostring(k)
-            end
-            buildIDMap(v, map, seen)
-        end
-    end
-    return map
-end
-
-local STICKER_TYPES = getStickerTypes()
-local STICKER_ID_MAP = STICKER_TYPES and buildIDMap(STICKER_TYPES) or {}
-local LAST_SIGNS = {}
-local HAS_STAR_SIGN = false
-local WROTE_STATUS = false
-local NO_STAR_TIMER = 0
-local function checkQuest()
-    if QUEST_DONE or Config["Check Quest"] == false then return end
-
-    local cache = getCache()
-    if not cache then return end
-
-    local completed = deepFind(cache, "Completed")
-    if not completed then return end
-
-    for _, q in pairs(completed) do
-        if tostring(q) == "Seven To Seven" then
-            sendWebhook("Quest Seven To Seven done!!!!!", {
-                { name = "Player", value = Player.Name, inline = false },
-                { name = "Bee Count", value = tostring(#getBees()), inline = false }
-            }, 16776960)
-
-            QUEST_DONE = true
-            STAR_TIMER = tick()
-            break
-        end
-    end
-end
 local function checkStarSign()
-    if WROTE_STATUS then return end
-    if not Config["Auto Change Acc"] then return end
-
+    if STATE.WROTE_STATUS then return end
     local cache = getCache()
     if not cache then return end
 
-    local received = deepFind(cache, "Received")
-    if not received then return end
+    local received = deepFind(cache,"Received") or {}
+    local found = false
 
-    local foundThisTick = false
-    HAS_STAR_SIGN = false
-
-    for id, amount in pairs(received) do
-        local name = STICKER_ID_MAP[tonumber(id)]
-        if name and name:lower():find("star sign") then
-            HAS_STAR_SIGN = true
-
-            if not LAST_SIGNS[name] or amount > LAST_SIGNS[name] then
-                foundThisTick = true
-
-                sendWebhook("Star Sign collected!!!", {
-                    { name = "Player", value = Player.Name, inline = false },
-                    { name = "Star Sign", value = name, inline = false },
-                    { name = "Amount", value = tostring(amount), inline = false }
-                }, 65280)
-
-                LAST_SIGNS[name] = amount
-            end
+    for _,amt in pairs(received) do
+        if tonumber(amt) and amt > 0 then
+            found = true
         end
     end
 
     local beeCount = #getBees()
-    local playTime = tonumber(deepFind(cache, "PlayTime"))
+    local playTime = tonumber(deepFind(cache,"PlayTime"))
 
-    if HAS_STAR_SIGN and beeCount >= 20 and playTime == 28900 then
-        local filename = Player.Name .. ".txt"
-        writefile(filename, "Completed-CoStarSign")
-        WROTE_STATUS = true
+    if found and beeCount >= 20 and playTime == 28900 then
+        writeStatus("Completed-CoStarSign")
+        STATE.WROTE_STATUS = true
         return
     end
 
-    if QUEST_DONE then
+    if STATE.QUEST_DONE then
         local inv = getInventory()
-        local hasStarEgg = (inv["Star Egg"] or 0) > 0
-
-        if not hasStarEgg and not foundThisTick then
-            if NO_STAR_TIMER == 0 then
-                NO_STAR_TIMER = tick()
+        if (inv["Star Egg"] or 0) == 0 then
+            if STATE.NO_STAR_TIMER == 0 then
+                STATE.NO_STAR_TIMER = tick()
+            elseif tick() - STATE.NO_STAR_TIMER >= 20 then
+                writeStatus("Completed-KoStarSign")
+                STATE.WROTE_STATUS = true
             end
         else
-            NO_STAR_TIMER = 0
-        end
-
-        if NO_STAR_TIMER > 0 and tick() - NO_STAR_TIMER >= 20 then
-            local filename = Player.Name .. ".txt"
-            writefile(filename, "Completed-KoStarSign")
-            WROTE_STATUS = true
+            STATE.NO_STAR_TIMER = 0
         end
     end
 end
 
+-- ================= QUEST CHECK =================
 
-
-local function handleStarTimeout()
-    if not QUEST_DONE then return end
-    if STAR_TIMER == 0 then return end
-
-    if tick() - STAR_TIMER >= 20 then
-        writeStatus("Completed-KoStarSign")
-        STAR_TIMER = 0
+local function checkQuest()
+    if STATE.QUEST_DONE or not Config["Check Quest"] then return end
+    local cache = getCache()
+    local completed = deepFind(cache,"Completed") or {}
+    for _,q in pairs(completed) do
+        if tostring(q) == "Seven To Seven" then
+            STATE.QUEST_DONE = true
+            sendWebhook("Quest Seven To Seven done!",{
+                {name="Player",value=Player.Name,inline=false},
+                {name="Bee Count",value=tostring(#getBees()),inline=false}
+            },16776960)
+        end
     end
 end
+
+-- ================= LOOP =================
 
 while true do
-    checkStarSign()
     autoFeed()
     autoHatch()
     autoPrinter()
     checkQuest()
-    handleStarTimeout()
+    checkStarSign()
     task.wait(5)
 end
