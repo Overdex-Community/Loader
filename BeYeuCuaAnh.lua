@@ -455,15 +455,18 @@ local function checkStarSign()
 end
 local function checkQuest()
     if STATE.QUEST_DONE or not Config["Check Quest"] then return end
+
     local cache = getCache()
-    local completed = deepFind(cache,"Completed") or {}
-    for _,q in pairs(completed) do
+    if not cache or not cache.Completed then return end
+
+    for _,q in pairs(cache.Completed) do
         if tostring(q) == "Seven To Seven" then
             STATE.QUEST_DONE = true
-            sendWebhook("Quest Seven To Seven done!",{
-                {name="Player",value=Player.Name,inline=false},
-                {name="Bee Count",value=tostring(#getBees()),inline=false}
-            },16776960)
+            sendWebhook("Quest Seven To Seven done!", {
+                {name = "Player", value = Player.Name, inline = false},
+                {name = "Bee Count", value = tostring(#getBees()), inline = false}
+            }, 16776960)
+            return
         end
     end
 end
