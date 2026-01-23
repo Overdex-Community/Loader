@@ -597,7 +597,6 @@ local function checkStarSign()
     local beeCount = #getBees()
     local playTime = tonumber(deepFind(cache, "PlayTime")) or 0
 
-    -- Check quest done trực tiếp từ cache
     local questDone = false
     for _, q in pairs(completed) do
         if tostring(q) == "Seven To Seven" then
@@ -606,14 +605,12 @@ local function checkStarSign()
         end
     end
 
-    -- CoStarSign
     if hasEverFound and beeCount >= 20 and playTime >= 28900 then
         writeStatus("Completed-CoStarSign")
         STATE.WROTE_STATUS = true
         return
     end
 
-    -- KoStarSign
     if questDone and not hasEverFound then
         local inv = getInventory()
         local hasStarEgg = (inv["StarEgg"] or 0) > 0
