@@ -928,7 +928,7 @@ local function autoDeleteStickers()
         local id = d.TypeID or d[3]
         local name = STICKER_ID_MAP[tonumber(id)] or ""
 
-        print("[AUTO DELETE] Checking:", name)
+        
 
         if not shouldKeepSticker(name) then
             ev:FireServer({
@@ -939,7 +939,7 @@ local function autoDeleteStickers()
             }, false)
             task.wait(0.3)
         else
-            print("[AUTO DELETE] KEEP:", name)
+            
         end
     end
 end
