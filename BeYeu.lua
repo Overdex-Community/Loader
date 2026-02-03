@@ -943,6 +943,175 @@ local function autoDeleteStickers()
         end
     end
 end
+function hopSprout()
+    local FILE, TTL = "sproutjobid.json", 600
+    local WS = game:GetService("Workspace")
+    local TP = game:GetService("TeleportService")
+    local Http = game:GetService("HttpService")
+    local Players = game:GetService("Players")
+    local Player = Players.LocalPlayer
+    local PID = game.PlaceId
+
+    local sproutWh = "https://discord.com/api/webhooks/1467181055004905656/veMg4vsAgJa8v4mbdT5z__qAOg-1ztfubMwrM5RzfCxQa6tOY_UxB3FuBxdBFYMA8glw"
+
+    getgenv().Config = getgenv().Config or {}
+    getgenv().Config["Field Accept"] = getgenv().Config["Field Accept"] or {
+        Enable = false,
+        ["Field Name"] = {}
+    }
+    local cfg = getgenv().Config["Field Accept"]
+
+    local function questDone()
+        local cache = getCache()
+        if not cache then return false end
+        local done = deepFind(cache, "Completed") or {}
+        for _, q in pairs(done) do
+            if tostring(q) == "Picking Out Pineapples" then
+                return true
+            end
+        end
+        return false
+    end
+
+    if not cfg.Enable then
+        if questDone() then
+            cfg.Enable = true
+        else
+            return
+        end
+    end
+
+    local function read()
+        if not isfile(FILE) then return {} end
+        local ok, data = pcall(function()
+            return Http:JSONDecode(readfile(FILE))
+        end)
+        return ok and data or {}
+    end
+
+    local function write(t)
+        writefile(FILE, Http:JSONEncode(t))
+    end
+
+    local function save()
+        local t = read()
+        local now = os.time()
+        for k, v in pairs(t) do
+            if now - (v.Time or 0) >= TTL then
+                t[k] = nil
+            end
+        end
+        t[game.JobId] = { Time = now }
+        write(t)
+    end
+
+    local function findField(pos)
+        local zones = WS:FindFirstChild("FlowerZones")
+        if not zones then return "Unknown" end
+
+        for _, f in pairs(zones:GetChildren()) do
+            if f:IsA("BasePart") then
+                local s, c = f.Size / 2, f.Position
+                if pos.X >= c.X - s.X and pos.X <= c.X + s.X
+                and pos.Z >= c.Z - s.Z and pos.Z <= c.Z + s.Z then
+                    return f.Name
+                end
+            end
+        end
+        return "Unknown"
+    end
+
+    local function allowed(name)
+        for _, v in pairs(cfg["Field Name"]) do
+            if string.find(string.lower(name), string.lower(v)) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function sproutWebhook(field)
+        if not sproutWh or sproutWh == "" then return end
+
+        local job = game.JobId
+        local pc = 'game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,"'
+            .. job .. '",game.Players.LocalPlayer)'
+        local mobile = pc
+
+        local data = {
+            embeds = {{
+                title = "🌱 Sprout Found!",
+                color = 65280,
+                fields = {
+                    { name = "Field", value = field, inline = true },
+                    { name = "JobID", value = job, inline = false },
+                    { name = "PC Copy", value = "```" .. pc .. "```", inline = false },
+                    { name = "Mobile Copy", value = "```" .. mobile .. "```", inline = false }
+                },
+                image = { url = IMAGE_URL },
+                footer = {
+                    text = "BeYeu Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S")
+                }
+            }}
+        }
+
+        pcall(function()
+            request({
+                Url = sproutWh,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = Http:JSONEncode(data)
+            })
+        end)
+    end
+
+    local function servers(cursor)
+        local url = "https://games.roblox.com/v1/games/" .. PID ..
+            "/servers/Public?sortOrder=Asc&limit=100"
+        if cursor then
+            url = url .. "&cursor=" .. cursor
+        end
+        return Http:JSONDecode(game:HttpGet(url))
+    end
+
+    local function hop()
+        save()
+        local used = read()
+        local page = servers()
+
+        while true do
+            for _, s in pairs(page.data or {}) do
+                if s.playing < s.maxPlayers
+                and not used[s.id]
+                and not s.privateServerId
+                and s.access == "Public" then
+                    TP:TeleportToPlaceInstance(PID, s.id, Player)
+                    task.wait(2)
+                end
+            end
+            if not page.nextPageCursor then break end
+            page = servers(page.nextPageCursor)
+            task.wait(0.5)
+        end
+    end
+
+    local sprouts = WS:FindFirstChild("Sprouts")
+    local sprout = sprouts and sprouts:FindFirstChild("Sprout")
+
+    if not (sprout and sprout:IsA("MeshPart")) then
+        return hop()
+    end
+
+    local field = findField(sprout.Position)
+
+    if allowed(field) then
+        sproutWebhook(field)
+        sprout.AncestryChanged:Wait()
+        hop()
+    else
+        hop()
+    end
+end
 task.spawn(function()
     while task.wait(3) do
         autoClaimStickers()
@@ -952,6 +1121,11 @@ end)
 task.spawn(function()
     while task.wait(3) do
         autoPrinter()
+    end
+end)
+task.spawn(function()
+    while task.wait(3) do
+        hopSprout()
     end
 end)
 task.spawn(function()
