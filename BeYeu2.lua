@@ -961,6 +961,9 @@ function hopSprout()
     }
     local cfg = getgenv().Config["Field Accept"]
 
+    local LAST_REQ = 0
+    local REQ_CD = 8 -- giây giữa mỗi lần gọi API server list
+
     local function questDone()
         local cache = getCache()
         if not cache then return false end
@@ -1008,7 +1011,6 @@ function hopSprout()
     local function findField(pos)
         local zones = WS:FindFirstChild("FlowerZones")
         if not zones then return "Unknown" end
-
         for _, f in pairs(zones:GetChildren()) do
             if f:IsA("BasePart") then
                 local s, c = f.Size / 2, f.Position
@@ -1032,7 +1034,6 @@ function hopSprout()
 
     local function sproutWebhook(field)
         if not sproutWh or sproutWh == "" then return end
-
         local job = game.JobId
         local pc = 'game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,"'
             .. job .. '",game.Players.LocalPlayer)'
@@ -1048,10 +1049,8 @@ function hopSprout()
                     { name = "PC Copy", value = "```" .. pc .. "```", inline = false },
                     { name = "Mobile Copy", value = "```" .. mobile .. "```", inline = false }
                 },
-                image = { url = IMAGE_URL },
-                footer = {
-                    text = "BeYeu Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S")
-                }
+                
+                footer = { text = "Jung Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S") }
             }}
         }
 
@@ -1065,33 +1064,52 @@ function hopSprout()
         end)
     end
 
-    local function servers(cursor)
+    local function getServers(cursor)
+        local now = tick()
+        if now - LAST_REQ < REQ_CD then
+            task.wait(REQ_CD - (now - LAST_REQ))
+        end
+        LAST_REQ = tick()
+
         local url = "https://games.roblox.com/v1/games/" .. PID ..
             "/servers/Public?sortOrder=Asc&limit=100"
         if cursor then
             url = url .. "&cursor=" .. cursor
         end
-        return Http:JSONDecode(game:HttpGet(url))
+
+        local ok, data = pcall(function()
+            return Http:JSONDecode(game:HttpGet(url))
+        end)
+
+        if not ok then
+            task.wait(15) -- bị 429 thì nghỉ lâu hơn
+            return nil
+        end
+
+        return data
     end
 
     local function hop()
         save()
         local used = read()
-        local page = servers()
+        local cursor = nil
 
         while true do
+            local page = getServers(cursor)
+            if not page then continue end
+
             for _, s in pairs(page.data or {}) do
                 if s.playing < s.maxPlayers
                 and not used[s.id]
-                and not s.privateServerId
-                and s.access == "Public" then
+                and not s.privateServerId then
                     TP:TeleportToPlaceInstance(PID, s.id, Player)
-                    task.wait(2)
+                    task.wait(5)
+                    return
                 end
             end
-            if not page.nextPageCursor then break end
-            page = servers(page.nextPageCursor)
-            task.wait(0.5)
+
+            cursor = page.nextPageCursor
+            if not cursor then break end
         end
     end
 
@@ -1124,7 +1142,7 @@ task.spawn(function()
     end
 end)
 task.spawn(function()
-    while task.wait(3) do
+    while task.wait(20) do
         hopSprout()
     end
 end)
