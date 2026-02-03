@@ -944,6 +944,7 @@ local function autoDeleteStickers()
     end
 end
 function hopSprout()
+    -- ===== CONFIG / SERVICES =====
     local FILE, TTL = "sproutjobid.json", 600
     local WS = game:GetService("Workspace")
     local TP = game:GetService("TeleportService")
@@ -952,8 +953,10 @@ function hopSprout()
     local Player = Players.LocalPlayer
     local PID = game.PlaceId
 
-    local sproutWh = "https://discord.com/api/webhooks/1467181055004905656/veMg4vsAgJa8v4mbdT5z__qAOg-1ztfubMwrM5RzfCxQa6tOY_UxB3FuBxdBFYMA8glw"
+    -- Webhook riêng cho Sprout
+    local SPROUT_WH = "https://discord.com/api/webhooks/1467181055004905656/veMg4vsAgJa8v4mbdT5z__qAOg-1ztfubMwrM5RzfCxQa6tOY_UxB3FuBxdBFYMA8glw"
 
+    -- ===== DEFAULT CONFIG (SAFE FALLBACK) =====
     getgenv().Config = getgenv().Config or {}
     getgenv().Config["Field Accept"] = getgenv().Config["Field Accept"] or {
         Enable = false,
@@ -961,10 +964,13 @@ function hopSprout()
     }
     local cfg = getgenv().Config["Field Accept"]
 
+    -- ===== API RATE LIMIT =====
     local LAST_REQ = 0
-    local REQ_CD = 8 -- giây giữa mỗi lần gọi API server list
+    local REQ_CD = 8
 
+    -- ===== QUEST CHECK =====
     local function questDone()
+        if not getCache or not deepFind then return false end
         local cache = getCache()
         if not cache then return false end
         local done = deepFind(cache, "Completed") or {}
@@ -976,6 +982,7 @@ function hopSprout()
         return false
     end
 
+    -- Enable khi quest xong
     if not cfg.Enable then
         if questDone() then
             cfg.Enable = true
@@ -984,6 +991,7 @@ function hopSprout()
         end
     end
 
+    -- ===== FILE CACHE =====
     local function read()
         if not isfile(FILE) then return {} end
         local ok, data = pcall(function()
@@ -996,7 +1004,7 @@ function hopSprout()
         writefile(FILE, Http:JSONEncode(t))
     end
 
-    local function save()
+    local function saveJob()
         local t = read()
         local now = os.time()
         for k, v in pairs(t) do
@@ -1008,9 +1016,11 @@ function hopSprout()
         write(t)
     end
 
+    -- ===== FIELD DETECT =====
     local function findField(pos)
         local zones = WS:FindFirstChild("FlowerZones")
         if not zones then return "Unknown" end
+
         for _, f in pairs(zones:GetChildren()) do
             if f:IsA("BasePart") then
                 local s, c = f.Size / 2, f.Position
@@ -1032,12 +1042,14 @@ function hopSprout()
         return false
     end
 
+    -- ===== WEBHOOK =====
     local function sproutWebhook(field)
-        if not sproutWh or sproutWh == "" then return end
+        if not SPROUT_WH or SPROUT_WH == "" then return end
+
         local job = game.JobId
-        local pc = 'game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,"'
-            .. job .. '",game.Players.LocalPlayer)'
-        local mobile = pc
+        local tpCode =
+            'game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,"' ..
+            job .. '",game.Players.LocalPlayer)'
 
         local data = {
             embeds = {{
@@ -1046,17 +1058,15 @@ function hopSprout()
                 fields = {
                     { name = "Field", value = field, inline = true },
                     { name = "JobID", value = job, inline = false },
-                    { name = "PC Copy", value = "```" .. pc .. "```", inline = false },
-                    { name = "Mobile Copy", value = "```" .. mobile .. "```", inline = false }
+                    { name = "Teleport", value = "```" .. tpCode .. "```", inline = false }
                 },
-                
-                footer = { text = "Jung Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S") }
+                footer = { text = "BeYeu Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S") }
             }}
         }
 
         pcall(function()
             request({
-                Url = sproutWh,
+                Url = SPROUT_WH,
                 Method = "POST",
                 Headers = { ["Content-Type"] = "application/json" },
                 Body = Http:JSONEncode(data)
@@ -1064,6 +1074,7 @@ function hopSprout()
         end)
     end
 
+    -- ===== SERVER LIST =====
     local function getServers(cursor)
         local now = tick()
         if now - LAST_REQ < REQ_CD then
@@ -1082,37 +1093,49 @@ function hopSprout()
         end)
 
         if not ok then
-            task.wait(15) -- bị 429 thì nghỉ lâu hơn
+            task.wait(15)
             return nil
         end
 
         return data
     end
 
+    -- ===== HOP CORE =====
     local function hop()
-        save()
+        saveJob()
         local used = read()
         local cursor = nil
+        local tries = 0
 
-        while true do
+        while tries < 300 do
             local page = getServers(cursor)
-            if not page then continue end
+            if not page then
+                tries += 1
+                task.wait(2)
+            else
+                for _, s in pairs(page.data or {}) do
+                    if s.playing > 0
+                    and s.playing < s.maxPlayers
+                    and not used[s.id]
+                    and not s.privateServerId
+                    and (not s.access or s.access == "Public") then
 
-            for _, s in pairs(page.data or {}) do
-                if s.playing < s.maxPlayers
-                and not used[s.id]
-                and not s.privateServerId then
-                    TP:TeleportToPlaceInstance(PID, s.id, Player)
-                    task.wait(5)
-                    return
+                        used[s.id] = { Time = os.time() }
+                        write(used)
+
+                        TP:TeleportToPlaceInstance(PID, s.id, Player)
+                        task.wait(5)
+                        return
+                    end
                 end
-            end
 
-            cursor = page.nextPageCursor
-            if not cursor then break end
+                cursor = page.nextPageCursor
+                if not cursor then break end
+            end
         end
     end
 
+    -- ===== SPROUT CHECK =====
     local sprouts = WS:FindFirstChild("Sprouts")
     local sprout = sprouts and sprouts:FindFirstChild("Sprout")
 
@@ -1130,6 +1153,14 @@ function hopSprout()
         hop()
     end
 end
+
+-- ===== LOOP RUN (SAFE) =====
+task.spawn(function()
+    while true do
+        hopSprout()
+        task.wait(45)
+    end
+end)
 task.spawn(function()
     while task.wait(3) do
         autoClaimStickers()
@@ -1139,11 +1170,6 @@ end)
 task.spawn(function()
     while task.wait(3) do
         autoPrinter()
-    end
-end)
-task.spawn(function()
-    while task.wait(20) do
-        hopSprout()
     end
 end)
 task.spawn(function()
