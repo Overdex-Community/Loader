@@ -1058,9 +1058,9 @@ function hopSprout()
                 fields = {
                     { name = "Field", value = field, inline = true },
                     { name = "JobID", value = job, inline = false },
-                    { name = "Teleport", value = "```" .. tpCode .. "```", inline = false }
+                    { name = "Teleport", value = "`" .. tpCode .. "`", inline = false }
                 },
-                footer = { text = "BeYeu Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S") }
+                footer = { text = "Jung Sprout Finder | " .. os.date("%d/%m/%Y %H:%M:%S") }
             }}
         }
 
@@ -1134,8 +1134,6 @@ function hopSprout()
             end
         end
     end
-
-    -- ===== SPROUT CHECK =====
     local sprouts = WS:FindFirstChild("Sprouts")
     local sprout = sprouts and sprouts:FindFirstChild("Sprout")
 
@@ -1154,7 +1152,6 @@ function hopSprout()
     end
 end
 
--- ===== LOOP RUN (SAFE) =====
 task.spawn(function()
     while true do
         hopSprout()
