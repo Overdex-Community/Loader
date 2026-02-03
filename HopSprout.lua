@@ -79,7 +79,7 @@ function hopSprout()
                 fields={
                     {name="Field",value=field,inline=true},
                     {name="JobID",value=job,inline=false},
-                    {name="Teleport",value="```"..tpCode.."```",inline=false}
+                    {name="Teleport",value="`"..tpCode.."`",inline=false}
                 },
                 footer={text="Sprout Hopper | "..os.date("%d/%m/%Y %H:%M:%S")}
             }}
