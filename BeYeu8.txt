@@ -1130,10 +1130,24 @@ function AutoLoadConfig()
             print("[AutoLoadConfig]", ...)
         end
 
+        local function isEnabled()
+            local cfg = getgenv().Config
+            return cfg and cfg["Load Config Atlas"] == true
+        end
+
         local function tryHop(reason)
-            if tick() - lastHop < HOP_CD then return end
+            if not isEnabled() then
+                log("Hop blocked (disabled)")
+                return
+            end
+
+            if tick() - lastHop < HOP_CD then
+                return
+            end
+
             lastHop = tick()
             log("HOP | reason =", reason)
+
             pcall(function()
                 TeleportService:TeleportToPlaceInstance(
                     game.PlaceId,
@@ -1150,23 +1164,16 @@ function AutoLoadConfig()
             return ok and data or nil
         end
 
-        local function hasAllRequired(raw, localCfg, path)
-            path = path or ""
+        local function hasAllRequired(raw, localCfg)
             for k, v in pairs(raw) do
-                local curPath = path .. "." .. tostring(k)
-
                 if localCfg[k] == nil then
-                    log("Missing key:", curPath)
                     return false
                 end
-
                 if type(v) ~= type(localCfg[k]) then
-                    log("Type mismatch:", curPath, type(v), "!=", type(localCfg[k]))
                     return false
                 end
-
                 if type(v) == "table" then
-                    if not hasAllRequired(v, localCfg[k], curPath) then
+                    if not hasAllRequired(v, localCfg[k]) then
                         return false
                     end
                 end
@@ -1175,9 +1182,9 @@ function AutoLoadConfig()
         end
 
         while task.wait(CHECK_DELAY) do
-            local cfg = getgenv().Config
-            if not cfg or cfg["Load Config Atlas"] ~= true then
-                continue
+            if not isEnabled() then
+                log("AutoLoadConfig disabled → loop stopped")
+                break
             end
 
             if not isfolder(FOLDER) then
@@ -1207,13 +1214,13 @@ function AutoLoadConfig()
             end)
             if not ok then
                 tryHop("http_failed")
-                continue
+                break
             end
 
             local rawCfg = safeDecode(rawText)
             if not rawCfg then
                 tryHop("raw_decode_fail")
-                continue
+                break
             end
 
             local localCfg
@@ -1225,16 +1232,17 @@ function AutoLoadConfig()
                 log("No local config → write & hop")
                 writefile(PATH, Http:JSONEncode(rawCfg))
                 tryHop("no_local_config")
-                continue
+                break
             end
 
             if not hasAllRequired(rawCfg, localCfg) then
                 log("Local missing required keys → overwrite & hop")
                 writefile(PATH, Http:JSONEncode(rawCfg))
                 tryHop("missing_required_key")
-            else
-                log("Config OK – no hop")
+                break
             end
+
+            log("Config OK – no hop")
         end
     end)
 end
