@@ -1132,7 +1132,88 @@ function hopSprout()
         hop()
     end
 end
+function AutoLoadConfig()
+    task.spawn(function()
+        local Players = game:GetService("Players")
+        local HttpService = game:GetService("HttpService")
+        local TeleportService = game:GetService("TeleportService")
+        local RS = game:GetService("ReplicatedStorage")
+        local Player = Players.LocalPlayer
 
+        local FOLDER = "atlas"
+        local PATH = FOLDER .. "/Preset 1.json"
+
+        local BEFORE_URL = "https://raw.githubusercontent.com/Overdex-Community/Loader/refs/heads/main/before.txt"
+        local AFTER_URL  = "https://raw.githubusercontent.com/Overdex-Community/Loader/refs/heads/main/after.txt"
+
+        local CHECK_DELAY = 10
+        local HOP_CD = 25
+        local LAST_HOP = 0
+
+        local function normalize(str)
+            return (str or "")
+                :gsub("\r\n", "\n")
+                :gsub("\r", "\n")
+                :gsub("%s+$", "")
+        end
+
+        local function hop()
+            if tick() - LAST_HOP < HOP_CD then return end
+            LAST_HOP = tick()
+            TeleportService:TeleportToPlaceInstance(
+                game.PlaceId,
+                game.JobId,
+                Player
+            )
+        end
+
+        while task.wait(CHECK_DELAY) do
+            local cfg = getgenv().Config
+            if not cfg or not cfg["Load Config Atlas"] then
+                continue
+            end
+
+            if not isfolder(FOLDER) then
+                makefolder(FOLDER)
+            end
+            local hasStarEgg = false
+            pcall(function()
+                local cache = require(RS.ClientStatCache):Get()
+                local eggs = cache and cache.Eggs
+                if eggs and tonumber(eggs.Star) and tonumber(eggs.Star) > 0 then
+                    hasStarEgg = true
+                end
+            end)
+            local canTrade = false
+            local tc = Player:FindFirstChild("TradeConfig")
+            if tc and tc:FindFirstChild("CanTrade") then
+                canTrade = tc.CanTrade.Value
+            end
+
+            local useAfter = hasStarEgg and not canTrade
+            local targetURL = useAfter and AFTER_URL or BEFORE_URL
+
+            local remoteText
+            local ok = pcall(function()
+                remoteText = game:HttpGet(targetURL)
+            end)
+            if not ok or not remoteText then
+                continue
+            end
+
+            local localText = isfile(PATH) and readfile(PATH) or nil
+
+            if localText and normalize(localText) == normalize(remoteText) then
+                continue 
+            end
+
+            writefile(PATH, remoteText)
+            warn("[AutoLoadConfig] Preset mismatch → rewritten & hopping")
+            hop()
+        end
+    end)
+end
+AutoLoadConfig()
 task.spawn(function()
     while true do
         hopSprout()
