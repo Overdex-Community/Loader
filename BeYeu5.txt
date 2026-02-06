@@ -1149,14 +1149,10 @@ function AutoLoadConfig()
         local CHECK_DELAY = 10
         local HOP_CD = 25
         local lastHop = 0
-
         local needHop = false
 
         local function normalize(str)
-            return (str or "")
-                :gsub("\r\n", "\n")
-                :gsub("\r", "\n")
-                :gsub("%s+$", "")
+            return (str or ""):gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("%s+$", "")
         end
 
         local function tryHop()
@@ -1164,7 +1160,7 @@ function AutoLoadConfig()
             if tick() - lastHop < HOP_CD then return end
             lastHop = tick()
 
-            warn("[AutoLoadConfig] Hop retry...")
+            warn("[AutoLoadConfig] Hopping...")
             pcall(function()
                 TeleportService:TeleportToPlaceInstance(
                     game.PlaceId,
@@ -1176,21 +1172,21 @@ function AutoLoadConfig()
 
         while task.wait(CHECK_DELAY) do
             local cfg = getgenv().Config
-            if not cfg or not cfg["Load Config Atlas"] then
+            if not cfg or cfg["Load Config Atlas"] ~= true then
                 needHop = false
                 continue
             end
 
+            -- 🔒 TỪ ĐÂY TRỞ XUỐNG MỚI ĐƯỢC PHÉP CHẠY
+
             if not isfolder(FOLDER) then
                 makefolder(FOLDER)
-                warn("[AutoLoadConfig] Folder created:", FOLDER)
             end
 
             local hasStarEgg = false
             pcall(function()
                 local cache = require(RS.ClientStatCache):Get()
-                local eggs = cache and cache.Eggs
-                if eggs and tonumber(eggs.Star) and tonumber(eggs.Star) > 0 then
+                if cache and cache.Eggs and tonumber(cache.Eggs.Star) > 0 then
                     hasStarEgg = true
                 end
             end)
@@ -1201,23 +1197,19 @@ function AutoLoadConfig()
                 canTrade = tc.CanTrade.Value
             end
 
-            local useAfter = hasStarEgg and not canTrade
-            local url = useAfter and AFTER_URL or BEFORE_URL
-
-            local remoteText
-            local ok = pcall(function()
-                remoteText = game:HttpGet(url)
+            local url = (hasStarEgg and not canTrade) and AFTER_URL or BEFORE_URL
+            local ok, remoteText = pcall(function()
+                return game:HttpGet(url)
             end)
-            if not ok or not remoteText then
+            if not ok then
                 tryHop()
                 continue
             end
 
             local localText = isfile(PATH) and readfile(PATH) or nil
-
             if not localText or normalize(localText) ~= normalize(remoteText) then
                 writefile(PATH, remoteText)
-                warn("[AutoLoadConfig] Preset updated")
+                warn("[AutoLoadConfig] Preset changed → need hop")
                 needHop = true
             end
 
