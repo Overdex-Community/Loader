@@ -6,9 +6,18 @@ function hopVicious()
     local Player = Players.LocalPlayer
     local PID = game.PlaceId
 
-    local FILE, TTL = "vicbeejobid.json", 600
+    getgenv().Config = getgenv().Config or {}
+
+    getgenv().Config["Field Accept"] = getgenv().Config["Field Accept"] or {
+        Enable = false,
+        ["Field Name"] = {}
+    }
+
+    local cfg = getgenv().Config["Field Accept"]
+    local VICIOUS_WH = (getgenv().Config and getgenv().Config["Webhook Link"]) or ""
+
+    local FILE, TTL = "sproutjobid.json", 600
     local LAST_REQ, REQ_CD = 0, 8
-    local VICIOUS_WH = getgenv().Config["Webhook Link"]
 
     local function read()
         if not isfile(FILE) then return {} end
@@ -45,8 +54,33 @@ function hopVicious()
         return nil
     end
 
-    local function viciousWebhook()
-        if not VICIOUS_WH or VICIOUS_WH == "" then return end
+    local function findField(pos)
+        local zones = WS:FindFirstChild("FlowerZones")
+        if not zones then return "Unknown" end
+        for _, f in pairs(zones:GetChildren()) do
+            if f:IsA("BasePart") then
+                local s, c = f.Size / 2, f.Position
+                if pos.X >= c.X - s.X and pos.X <= c.X + s.X
+                and pos.Z >= c.Z - s.Z and pos.Z <= c.Z + s.Z then
+                    return f.Name
+                end
+            end
+        end
+        return "Unknown"
+    end
+
+    local function allowed(name)
+        if not cfg.Enable then return true end
+        for _, v in pairs(cfg["Field Name"]) do
+            if string.find(string.lower(name), string.lower(v)) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function viciousWebhook(field)
+        if not VICIOUS_WH or VICIOUS_WH == "" or not request then return end
         local job = game.JobId
         local tpCode = 'game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,"' .. job .. '",game.Players.LocalPlayer)'
         local data = {
@@ -54,6 +88,7 @@ function hopVicious()
                 title = "🐝 Vicious Bee Found!",
                 color = 16711680,
                 fields = {
+                    { name = "Field", value = field, inline = true },
                     { name = "JobID", value = job, inline = false },
                     { name = "Teleport", value = "`" .. tpCode .. "`", inline = false }
                 }
@@ -80,7 +115,10 @@ function hopVicious()
         local ok, data = pcall(function()
             return Http:JSONDecode(game:HttpGet(url))
         end)
-        if not ok then task.wait(15) return nil end
+        if not ok then
+            task.wait(15)
+            return nil
+        end
         return data
     end
 
@@ -88,20 +126,32 @@ function hopVicious()
         saveJob()
         local used = read()
         local cursor
+
         while true do
             local page = getServers(cursor)
             if page then
                 for _, s in pairs(page.data or {}) do
-                    if s.playing > 0 and s.playing < s.maxPlayers and not used[s.id] and not s.privateServerId then
+                    if s.playing > 0
+                    and s.playing < s.maxPlayers
+                    and not used[s.id]
+                    and not s.privateServerId then
+
                         used[s.id] = { Time = os.time() }
                         write(used)
-                        TP:TeleportToPlaceInstance(PID, s.id, Player)
+
+                        pcall(function()
+                            TP:TeleportToPlaceInstance(PID, s.id, Player)
+                        end)
+
                         task.wait(5)
                         return
                     end
                 end
+
                 cursor = page.nextPageCursor
-                if not cursor then return end
+                if not cursor then
+                    return
+                end
             else
                 task.wait(2)
             end
@@ -115,7 +165,17 @@ function hopVicious()
         return
     end
 
-    viciousWebhook()
+    local field = "Unknown"
+    if vicious.PrimaryPart then
+        field = findField(vicious.PrimaryPart.Position)
+    end
+
+    if not allowed(field) then
+        hop()
+        return
+    end
+
+    viciousWebhook(field)
 
     local destroyed = false
     local conn
