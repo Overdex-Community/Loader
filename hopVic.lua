@@ -14,9 +14,9 @@ function hopVicious()
     }
 
     local cfg = getgenv().Config["Field Accept"]
-    local VICIOUS_WH = (getgenv().Config and getgenv().Config["Webhook Link"]) or ""
+    local VICIOUS_WH = "https://discord.com/api/webhooks/1467181077595557929/j26ECltg71z7QjDbALYF-ZuhEcEhyh6w_Jq56VSCU434nW9DKnYJ_tUCoeB539g9Jj7a"
 
-    local FILE, TTL = "sproutjobid.json", 600
+    local FILE, TTL = "vicjobid.json", 600
     local LAST_REQ, REQ_CD = 0, 8
 
     local function read()
