@@ -17,7 +17,7 @@ function hopSprout()
 
     local FILE, TTL = "sproutjobid.json", 600
     local LAST_REQ, REQ_CD = 0, 8
-    local SPROUT_WH = (getgenv().Config and getgenv().Config["Webhook Link"]) or ""
+    local SPROUT_WH = "https://discord.com/api/webhooks/1467181076622606428/knHp0IVlHI6krH-niedJB81pp95c08NgwtaAvJJ1f8D3CSQofCfDee28hG1cWIIbFdZb"
 
     local function read()
         if not isfile(FILE) then return {} end
