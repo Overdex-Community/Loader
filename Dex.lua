@@ -1,6 +1,11 @@
--- https://github.com/LorekeeperZinnia/Dex
 -- Modified by Vortex. Changed: Language to English
-
+--[[
+   Modified by Jung Ganmyeon
+   Discord: discord.gg/beekeeper
+   Change:
+    [Add] Button dump full module script in game
+    [Rework] New ui
+   Update: 3/3/2026
 --[[
 	Dex
 	Created by Moon
@@ -11823,4 +11828,5 @@ Main = (function()
 end)()
 
 -- Start
+
 Main.Init()
